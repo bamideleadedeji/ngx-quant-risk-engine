@@ -9,14 +9,16 @@ Description:
 
 Features:
     - Calculates exact round-lot integer units based on live market ask prices
-    - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.35% total buy cost)
-    - Enforces minimum transaction order thresholds to prevent fee erosion
-    - Generates dispatchable trade execution payloads and CSV rebalance logs
+    - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.39% total buy cost)
+    - Enforces micro-capital friendly order thresholds (₦1,000 min limit)
+    - Dispatches instant 1-click execution notifications via Telegram (@ngx_quant_risk_bot)
+    - Appends timestamped audit logs to persistent CSV ledger (`ngx_trade_audit.csv`)
 ===============================================================================
 """
 
 import os
 import json
+import requests
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -27,13 +29,57 @@ from typing import Dict, List, Tuple, Any, Optional
 # NGX Transaction Fee & Duty Schedule
 # =============================================================================
 BROKER_COMMISSION_PCT = 0.0100  # 1.00% Brokerage Commission
-SEC_FEE_PCT = 0.0030           # 0.30% Securities & Exchange Commission Fee
-NSE_STAMP_DUTY_PCT = 0.00075   # 0.075% Stamp Duty
-CSCS_FEE_PCT = 0.00015         # 0.015% Central Securities Clearing System Fee
+SEC_FEE_PCT = 0.0030            # 0.30% Securities & Exchange Commission Fee
+NSE_STAMP_DUTY_PCT = 0.00075    # 0.075% Stamp Duty
+CSCS_FEE_PCT = 0.00015          # 0.015% Central Securities Clearing System Fee
 
 TOTAL_BUY_FEE_PCT = BROKER_COMMISSION_PCT + SEC_FEE_PCT + NSE_STAMP_DUTY_PCT + CSCS_FEE_PCT  # ~1.39%
 
-MIN_ORDER_VALUE_NGN = 50_000.0  # ₦50,000 minimum trade size to prevent fee erosion
+MIN_ORDER_VALUE_NGN = 1_000.0  # ₦1,000 minimum trade size for micro-capital trading
+
+
+# =============================================================================
+# Telegram Signal Dispatcher
+# =============================================================================
+def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) -> bool:
+    """
+    Dispatches live execution signals directly to your phone via Telegram bot.
+    """
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not bot_token or not chat_id:
+        print("⚠️ Telegram credentials missing in environment/secrets.")
+        return False
+
+    message = (
+        "🚀 *NGX QUANT ENGINE — LIVE TRADE SIGNAL*\n\n"
+        f"📌 *Action:* `{order.get('action', 'BUY')}`\n"
+        f"📈 *Ticker:* `{order.get('symbol')}`\n"
+        f"🔢 *Units to Buy:* `{order.get('units', 0):,} shares`\n"
+        f"💵 *Target Price:* `₦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
+        f"💰 *Gross Value:* `₦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
+        f"🧾 *Est. Fees (1.39%):* `₦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
+        f"💼 *Wallet Cash Remaining:* `₦{cash_buffer_ngn:,.2f}`\n\n"
+        "📲 *Execution Steps:*\n"
+        f"1. Open **Bamboo** app on your phone.\n"
+        f"2. Search **{order.get('symbol')}**.\n"
+        f"3. Tap **Buy** $\\rightarrow$ Enter **{order.get('units', 0)} shares** (₦{order.get('gross_value_ngn', 0.0):,.2f})."
+    )
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+
+    try:
+        res = requests.post(url, json=payload, timeout=10)
+        return res.status_code == 200
+    except Exception as e:
+        print(f"❌ Failed to dispatch Telegram trade alert: {str(e)}")
+        return False
 
 
 # =============================================================================
@@ -47,10 +93,6 @@ def calculate_ngx_order_lots(
     """
     Converts target percentage weights into exact discrete integer share units 
     and calculates fee breakdowns for NGX execution.
-    
-    Returns:
-        orders (list): List of order specification dicts.
-        total_cash_required (float): Total capital required including transaction fees.
     """
     orders = []
     total_cash_required = 0.0
@@ -67,7 +109,7 @@ def calculate_ngx_order_lots(
 
         # Enforce Minimum Order Threshold
         if target_allocation_ngn < MIN_ORDER_VALUE_NGN:
-            print(f"  ⚠️ Skipping {symbol}: Order value ₦{target_allocation_ngn:,.2f} < ₦50k minimum limit.")
+            print(f"  ⚠️ Skipping {symbol}: Order value ₦{target_allocation_ngn:,.2f} < ₦1k minimum limit.")
             continue
 
         # Compute max integer units possible accounting for fee buffer
@@ -89,7 +131,7 @@ def calculate_ngx_order_lots(
         total_cash_required += net_cost
 
         orders.append({
-            "symbol": symbol.replace(".LG", ""),
+            "symbol": symbol.replace(".LG", "").replace(".NS", ""),
             "action": "BUY",
             "units": gross_units,
             "unit_price_ngn": price,
@@ -115,7 +157,7 @@ def dispatch_rebalance_orders(
     log_filepath: str = "ngx_trade_audit.csv"
 ) -> Dict[str, Any]:
     """
-    Simulates or dispatches trade orders and appends timestamped records 
+    Dispatches trade orders to Telegram and appends timestamped records 
     to persistent audit ledger.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -135,6 +177,9 @@ def dispatch_rebalance_orders(
             "Status": "DISPATCHED_PENDING_FILL"
         }
         dispatched_records.append(record)
+
+        # Dispatch live alert directly to Telegram phone app
+        send_telegram_trade_signal(order, cash_buffer_ngn)
 
     # Append to CSV Ledger
     if dispatched_records:
@@ -162,9 +207,9 @@ def dispatch_rebalance_orders(
 if __name__ == "__main__":
     print("🚀 Testing Phase 5 Automated Rebalancing & Execution Engine...")
 
-    mock_weights = {"DANGCEM.LG": 0.25, "ZENITHBANK.LG": 0.20}
-    mock_prices = {"DANGCEM.LG": 280.0, "ZENITHBANK.LG": 35.0}
-    portfolio_capital = 10_000_000.0  # ₦10 Million NGN
+    mock_weights = {"ZENITHBANK.LG": 0.50, "GTCO.LG": 0.50}
+    mock_prices = {"ZENITHBANK.LG": 61.63, "GTCO.LG": 47.71}
+    portfolio_capital = 14_850.0  # ₦14,850 Bamboo balance
 
     orders, req_cash = calculate_ngx_order_lots(mock_weights, mock_prices, portfolio_capital)
     summary = dispatch_rebalance_orders(orders, cash_buffer_ngn=portfolio_capital - req_cash)
