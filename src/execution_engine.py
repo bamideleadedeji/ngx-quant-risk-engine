@@ -4,14 +4,14 @@ NGX Quantitative Engine — Phase 5: Automated Rebalancing & Execution Engine
 File: src/execution_engine.py
 ===============================================================================
 Description:
-    Translates optimized portfolio target weights from Phase 4 into exact integer 
+    Translates optimized portfolio target weights into exact integer 
     share lots for listed equities on the Nigerian Exchange (NGX).
 
 Features:
     - Calculates exact round-lot integer units based on live market ask prices
     - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.39% total buy cost)
     - Enforces micro-capital friendly order thresholds (₦1,000 min limit)
-    - Dispatches instant 1-click execution notifications via Telegram (@ngx_quant_risk_bot)
+    - Dispatches instant execution notifications via Telegram (@ngx_quant_risk_bot)
     - Triggers hands-free execution via Playwright Headless Bridge (src/bamboo_bridge.py)
     - Appends timestamped audit logs to persistent CSV ledger (`ngx_trade_audit.csv`)
 ===============================================================================
@@ -29,7 +29,6 @@ from typing import Dict, List, Tuple, Any, Optional
 try:
     from src.bamboo_bridge import execute_bamboo_trade_headless
 except ImportError:
-    # Local/testing fallback if bamboo_bridge is in same directory
     try:
         from bamboo_bridge import execute_bamboo_trade_headless
     except ImportError:
@@ -60,7 +59,7 @@ def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) ->
     bot_token = None
     chat_id = None
 
-    # 1. Try fetching from Streamlit secrets (Streamlit Cloud runtime)
+    # 1. Try fetching from Streamlit secrets
     try:
         import streamlit as st
         bot_token = st.secrets.get("TELEGRAM_BOT_TOKEN")
@@ -68,7 +67,7 @@ def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) ->
     except Exception:
         pass
 
-    # 2. Fallback to os.environ (GitHub Actions / Local terminal)
+    # 2. Fallback to os.environ
     if not bot_token:
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not chat_id:
