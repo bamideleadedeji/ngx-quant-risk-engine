@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+yfinance
+arch
+statsmodels
+scikit-learn
+torch
+scipy
+requests
+plotly
