@@ -29,16 +29,6 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     """
     Launches a headless Chromium instance, authenticates with Bamboo, navigates 
     to the target stock symbol, inputs the calculated share lot, and confirms execution.
-
-    Parameters:
-        order (dict): Order payload containing keys:
-            - symbol (str): Ticker symbol (e.g., 'ZENITHBANK')
-            - units (int): Exact integer lot size to buy
-            - unit_price_ngn (float): Target entry limit/ask price
-            - action (str): Order side ('BUY')
-
-    Returns:
-        dict: Execution status report with status ('FILLED', 'SKIPPED', or 'FAILED')
     """
     # 1. Fetch Credentials from Environment / Streamlit Secrets
     email = os.environ.get("BAMBOO_EMAIL")
@@ -159,7 +149,6 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
 if __name__ == "__main__":
     print("🚀 Testing Headless Browser Execution Bridge locally...")
     
-    # Mock order lot payload for testing
     test_order = {
         "symbol": "ZENITHBANK",
         "units": 118,
