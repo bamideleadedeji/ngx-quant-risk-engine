@@ -40,12 +40,17 @@ jobs:
         run: |
           python -c "
           import sys
-          sys.path.insert(0, '.')
+          import os
+
+          # Guarantee project root is at top of module lookup path
+          sys.path.insert(0, os.path.abspath('.'))
 
           import src.data_ingestion as di
           from src.predictive_models import run_predictive_pipeline
           from src.risk_portfolio import optimize_ngx_portfolio
           from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
+
+          print('🚀 Running NGX Quantitative Automated Rebalancing...')
 
           # 1. Ingest Data
           if hasattr(di, 'fetch_all_ngx_data'):
@@ -57,17 +62,18 @@ jobs:
           else:
               df_ohlcv, df_macro = di.main()
           
-          # 2. Predictive Signals & Volatility
+          # 2. Predictive Signals & Volatility Modeling
           signals = run_predictive_pipeline(df_ohlcv)
           
-          # 3. Portfolio Optimization (₦14,850 Balance)
+          # 3. Portfolio Optimization (₦14,850 Bamboo Capital)
           portfolio_cap = 14850.0
           weights, prices = optimize_ngx_portfolio(signals, portfolio_cap)
           
-          # 4. Generate Lots & Execute Headless Bridge
+          # 4. Generate Shares Lots & Execute Headless Bridge
           orders, req_cash = calculate_ngx_order_lots(weights, prices, portfolio_cap)
           summary = dispatch_rebalance_orders(orders, cash_buffer_ngn=portfolio_cap - req_cash)
-          print('Execution Summary:', summary)
+          
+          print('✅ Execution Summary:', summary)
           "
 
       - name: 6. Commit & Push Updated Trade Audit Log
