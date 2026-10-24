@@ -12,6 +12,7 @@ Features:
     - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.39% total buy cost)
     - Enforces micro-capital friendly order thresholds (₦1,000 min limit)
     - Dispatches instant 1-click execution notifications via Telegram (@ngx_quant_risk_bot)
+    - Triggers hands-free execution via Playwright Headless Bridge (src/bamboo_bridge.py)
     - Appends timestamped audit logs to persistent CSV ledger (`ngx_trade_audit.csv`)
 ===============================================================================
 """
@@ -23,6 +24,16 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional
+
+# Import Headless Automated Execution Bridge
+try:
+    from src.bamboo_bridge import execute_bamboo_trade_headless
+except ImportError:
+    # Local/testing fallback if bamboo_bridge is in same directory
+    try:
+        from bamboo_bridge import execute_bamboo_trade_headless
+    except ImportError:
+        execute_bamboo_trade_headless = None
 
 
 # =============================================================================
@@ -76,10 +87,8 @@ def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) ->
         f"💰 *Gross Value:* `₦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
         f"🧾 *Est. Fees (1.39%):* `₦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
         f"💼 *Wallet Cash Remaining:* `₦{cash_buffer_ngn:,.2f}`\n\n"
-        "📲 *Execution Steps:*\n"
-        f"1. Open **Bamboo** app on your phone.\n"
-        f"2. Search **{order.get('symbol')}**.\n"
-        f"3. Tap **Buy** $\\rightarrow$ Enter **{order.get('units', 0)} shares** (₦{order.get('gross_value_ngn', 0.0):,.2f})."
+        "📲 *Execution Status:*\n"
+        "🤖 *Headless Bridge:* Executing automatically via Playwright..."
     )
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -172,13 +181,23 @@ def dispatch_rebalance_orders(
     log_filepath: str = "ngx_trade_audit.csv"
 ) -> Dict[str, Any]:
     """
-    Dispatches trade orders to Telegram and appends timestamped records 
-    to persistent audit ledger.
+    Dispatches trade orders via Telegram, triggers the Playwright Headless Bridge,
+    and appends timestamped records to persistent CSV audit ledger.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     dispatched_records = []
 
     for order in orders:
+        # 1. Send Instant Telegram Alert
+        send_telegram_trade_signal(order, cash_buffer_ngn)
+
+        # 2. Trigger Hands-Free Automated Playwright Bridge (Pathway B)
+        execution_status = "DISPATCHED_PENDING_FILL"
+        if execute_bamboo_trade_headless is not None:
+            bridge_res = execute_bamboo_trade_headless(order)
+            if bridge_res.get("status") == "FILLED":
+                execution_status = "FILLED_AUTOTRADE"
+
         record = {
             "Timestamp": timestamp,
             "Symbol": order["symbol"],
@@ -189,12 +208,9 @@ def dispatch_rebalance_orders(
             "Fees_NGN": order["total_fee_ngn"],
             "NetCost_NGN": order["total_net_cost_ngn"],
             "TargetWeight_Pct": order["target_weight_pct"],
-            "Status": "DISPATCHED_PENDING_FILL"
+            "Status": execution_status
         }
         dispatched_records.append(record)
-
-        # Dispatch live alert directly to Telegram phone app
-        send_telegram_trade_signal(order, cash_buffer_ngn)
 
     # Append to CSV Ledger
     if dispatched_records:
