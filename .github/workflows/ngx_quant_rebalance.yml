@@ -31,6 +31,7 @@ jobs:
 
       - name: 5. Execute Quantitative Pipeline & Headless Trade Bridge
         env:
+          PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BAMBOO_EMAIL: ${{ secrets.BAMBOO_EMAIL }}
@@ -38,12 +39,15 @@ jobs:
           BAMBOO_PIN: ${{ secrets.BAMBOO_PIN }}
         run: |
           python -c "
+          import sys
+          sys.path.insert(0, '.')
+
           import src.data_ingestion as di
           from src.predictive_models import run_predictive_pipeline
           from src.risk_portfolio import optimize_ngx_portfolio
           from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
 
-          # 1. Ingest Data (Robust entry point resolution)
+          # 1. Ingest Data
           if hasattr(di, 'fetch_all_ngx_data'):
               df_ohlcv, df_macro = di.fetch_all_ngx_data()
           elif hasattr(di, 'fetch_ngx_data'):
