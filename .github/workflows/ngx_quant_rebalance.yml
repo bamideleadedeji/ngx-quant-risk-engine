@@ -6,9 +6,6 @@ on:
     - cron: '0 9 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub Actions UI
 
-permissions:
-  contents: write # required so the audit-log commit can be pushed
-
 jobs:
   run-quant-pipeline:
     runs-on: ubuntu-latest
@@ -32,18 +29,7 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
-      - name: 5. Diagnose Project Layout
-        run: |
-          echo "---- Repo root ----"
-          ls -la
-          echo "---- src/ contents ----"
-          ls -la src/ || echo "ERROR: src/ directory not found"
-          # Make sure src is a proper package
-          touch src/__init__.py
-          echo "---- Modules defining run_predictive_pipeline ----"
-          grep -rn "def run_predictive_pipeline" . --include="*.py" || echo "Not found anywhere in repo"
-
-      - name: 6. Execute Quantitative Pipeline & Headless Trade Bridge
+      - name: 5. Execute Quantitative Pipeline & Headless Trade Bridge
         env:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -52,56 +38,17 @@ jobs:
           BAMBOO_PASSWORD: ${{ secrets.BAMBOO_PASSWORD }}
           BAMBOO_PIN: ${{ secrets.BAMBOO_PIN }}
         run: |
-          python - <<'PYEOF'
+          python -c "
           import sys
           import os
-          import importlib
-          import pkgutil
 
           # Guarantee project root is at top of module lookup path
           sys.path.insert(0, os.path.abspath('.'))
 
-          import src
           import src.data_ingestion as di
-
-
-          def find_function(func_name, preferred_modules=()):
-              """Import func_name from a preferred module, else scan every module in src/."""
-              for mod_name in preferred_modules:
-                  try:
-                      mod = importlib.import_module(mod_name)
-                      if hasattr(mod, func_name):
-                          return getattr(mod, func_name)
-                  except ModuleNotFoundError:
-                      pass
-              for m in pkgutil.iter_modules(src.__path__):
-                  try:
-                      mod = importlib.import_module(f'src.{m.name}')
-                  except Exception as e:
-                      print(f'⚠️ Skipping src.{m.name}: {e}')
-                      continue
-                  if hasattr(mod, func_name):
-                      print(f'ℹ️ Found {func_name} in src.{m.name}')
-                      return getattr(mod, func_name)
-              raise ImportError(
-                  f"Could not find '{func_name}' in any module under src/. "
-                  f"Available modules: {[m.name for m in pkgutil.iter_modules(src.__path__)]}"
-              )
-
-
-          run_predictive_pipeline = find_function(
-              'run_predictive_pipeline',
-              ('src.predictive_models', 'src.predictive_model', 'src.models', 'src.predictive')
-          )
-          optimize_ngx_portfolio = find_function(
-              'optimize_ngx_portfolio', ('src.risk_portfolio',)
-          )
-          calculate_ngx_order_lots = find_function(
-              'calculate_ngx_order_lots', ('src.execution_engine',)
-          )
-          dispatch_rebalance_orders = find_function(
-              'dispatch_rebalance_orders', ('src.execution_engine',)
-          )
+          from src.predictive_models import run_predictive_pipeline
+          from src.risk_portfolio import optimize_ngx_portfolio
+          from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
 
           print('🚀 Running NGX Quantitative Automated Rebalancing...')
 
@@ -114,22 +61,22 @@ jobs:
               df_ohlcv, df_macro = di.ingest_ngx_data()
           else:
               df_ohlcv, df_macro = di.main()
-
+          
           # 2. Predictive Signals & Volatility Modeling
           signals = run_predictive_pipeline(df_ohlcv)
-
+          
           # 3. Portfolio Optimization (₦14,850 Bamboo Capital)
           portfolio_cap = 14850.0
           weights, prices = optimize_ngx_portfolio(signals, portfolio_cap)
-
-          # 4. Generate Shares Lots & Execute Headless Bridge
+          
+          # 4. Generate Share Lots & Execute Headless Bridge
           orders, req_cash = calculate_ngx_order_lots(weights, prices, portfolio_cap)
           summary = dispatch_rebalance_orders(orders, cash_buffer_ngn=portfolio_cap - req_cash)
-
+          
           print('✅ Execution Summary:', summary)
-          PYEOF
+          "
 
-      - name: 7. Commit & Push Updated Trade Audit Log
+      - name: 6. Commit & Push Updated Trade Audit Log
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
