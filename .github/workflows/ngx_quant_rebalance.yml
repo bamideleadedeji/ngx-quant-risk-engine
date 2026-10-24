@@ -38,13 +38,20 @@ jobs:
           BAMBOO_PIN: ${{ secrets.BAMBOO_PIN }}
         run: |
           python -c "
-          from src.data_ingestion import fetch_all_ngx_data
+          import src.data_ingestion as di
           from src.predictive_models import run_predictive_pipeline
           from src.risk_portfolio import optimize_ngx_portfolio
           from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
 
-          # 1. Ingest Data
-          df_ohlcv, df_macro = fetch_all_ngx_data()
+          # 1. Ingest Data (Robust entry point resolution)
+          if hasattr(di, 'fetch_all_ngx_data'):
+              df_ohlcv, df_macro = di.fetch_all_ngx_data()
+          elif hasattr(di, 'fetch_ngx_data'):
+              df_ohlcv, df_macro = di.fetch_ngx_data()
+          elif hasattr(di, 'ingest_ngx_data'):
+              df_ohlcv, df_macro = di.ingest_ngx_data()
+          else:
+              df_ohlcv, df_macro = di.main()
           
           # 2. Predictive Signals & Volatility
           signals = run_predictive_pipeline(df_ohlcv)
