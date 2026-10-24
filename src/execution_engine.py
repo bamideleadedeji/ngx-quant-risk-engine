@@ -44,12 +44,27 @@ MIN_ORDER_VALUE_NGN = 1_000.0  # ₦1,000 minimum trade size for micro-capital t
 def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) -> bool:
     """
     Dispatches live execution signals directly to your phone via Telegram bot.
+    Reads credentials from Streamlit Secrets or Environment variables.
     """
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    
+    bot_token = None
+    chat_id = None
+
+    # 1. Try fetching from Streamlit secrets (Streamlit Cloud runtime)
+    try:
+        import streamlit as st
+        bot_token = st.secrets.get("TELEGRAM_BOT_TOKEN")
+        chat_id = st.secrets.get("TELEGRAM_CHAT_ID")
+    except Exception:
+        pass
+
+    # 2. Fallback to os.environ (GitHub Actions / Local terminal)
+    if not bot_token:
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not chat_id:
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
     if not bot_token or not chat_id:
-        print("⚠️ Telegram credentials missing in environment/secrets.")
+        print("⚠️ Telegram credentials missing in Streamlit secrets / os.environ.")
         return False
 
     message = (
@@ -69,7 +84,7 @@ def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) ->
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
-        "chat_id": chat_id,
+        "chat_id": str(chat_id),
         "text": message,
         "parse_mode": "Markdown"
     }
