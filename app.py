@@ -6,7 +6,7 @@ File: app.py
 Description:
     Interactive executive intelligence dashboard for monitoring NGX equity 
     forecasting, GARCH volatility metrics, 1-Day 95% VaR risk caps, and automated
-    rebalancing audit logs.
+    rebalancing audit logs. Micro-capital friendly (supports small balances).
 
 Features:
     - Real-time parameter controls (Portfolio Capital, VaR Confidence, SEC Fee Limits)
@@ -70,10 +70,10 @@ execution_mode = st.sidebar.radio(
 st.sidebar.markdown("### 💰 Capital & Risk Controls")
 portfolio_capital_ngn = st.sidebar.number_input(
     "Total Portfolio Capital (₦)",
-    min_value=100000.0,
+    min_value=1000.0,            # Micro-capital enabled (1k min)
     max_value=1000000000.0,
-    value=10000000.0,
-    step=500000.0,
+    value=14850.0,               # Default matches Bamboo funded balance
+    step=500.0,
     format="%.2f"
 )
 
@@ -86,9 +86,9 @@ var_confidence = st.sidebar.select_slider(
 max_single_stock_cap = st.sidebar.slider(
     "Max Single Stock Cap (%)",
     min_value=10.0,
-    max_value=50.0,
-    value=30.0,
-    step=5.0
+    max_value=100.0,             # Up to 100% for micro-accounts
+    value=100.0,
+    step=10.0
 ) / 100.0
 
 sec_fee_hurdle = st.sidebar.slider(
@@ -104,7 +104,7 @@ st.sidebar.markdown("### 🔬 Model Parameters")
 selected_symbols = st.sidebar.multiselect(
     "Select Target NGX Equities",
     options=DEFAULT_NGX_WATCHLIST,
-    default=["DANGCEM.LG", "ZENITHBANK.LG", "CADBURY.LG", "GTCO.LG", "MTNN.LG"]
+    default=["ZENITHBANK.LG", "GTCO.LG", "DANGCEM.LG", "MTNN.LG"]
 )
 
 epochs_count = st.sidebar.slider("Deep Learning Training Epochs", min_value=5, max_value=50, value=10)
