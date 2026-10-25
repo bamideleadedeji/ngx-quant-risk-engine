@@ -21,7 +21,7 @@ import os
 import requests
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, Any
 from datetime import datetime, timedelta
 
 # Standardized watchlist for major liquid NGX sectors
