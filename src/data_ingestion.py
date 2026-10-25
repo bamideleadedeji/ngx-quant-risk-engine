@@ -21,7 +21,7 @@ import os
 import requests
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 from datetime import datetime, timedelta
 
 # Standardized watchlist for major liquid NGX sectors
@@ -221,7 +221,7 @@ def fetch_cbn_macro_indicators() -> pd.DataFrame:
     Ingests key Nigerian macroeconomic drivers (MPR, Inflation, USD/NGN FX rate).
     """
     try:
-        dates = pd.date_range(end=datetime.now(), periods=24, freq="M")
+        dates = pd.date_range(end=datetime.now(), periods=24, freq="ME")
         macro_df = pd.DataFrame({
             "Date": dates,
             "CBN_MPR_Pct": np.full(len(dates), 26.75),   # CBN Monetary Policy Rate
@@ -236,12 +236,12 @@ def fetch_cbn_macro_indicators() -> pd.DataFrame:
 
 
 # =============================================================================
-# Pipeline Orchestrator Function
+# Pipeline Orchestrator Functions
 # =============================================================================
 def run_phase_1_pipeline(
     symbols: Optional[List[str]] = None, 
     start_date: Optional[str] = None
-) -> Dict[str, pd.DataFrame]:
+) -> Dict[str, Any]:
     """
     Executes Phase 1 data ingestion across all target NGX equities and macro drivers.
     """
@@ -273,10 +273,26 @@ def run_phase_1_pipeline(
     }
 
 
+def fetch_all_ngx_data(
+    symbols: Optional[List[str]] = None, 
+    start_date: Optional[str] = None
+) -> Tuple[Dict[str, pd.DataFrame], pd.DataFrame]:
+    """
+    Direct interface function expected by GitHub Actions workflow and automated quantitative execution engines.
+    Returns (ohlcv_series_dict, macro_indicators_dataframe).
+    """
+    results = run_phase_1_pipeline(symbols=symbols, start_date=start_date)
+    return results["ohlcv_series"], results["macro_indicators"]
+
+
+# Alias for backward compatibility
+fetch_ngx_data = fetch_all_ngx_data
+
+
 if __name__ == "__main__":
     # Test execution locally
-    data = run_phase_1_pipeline(symbols=["ZENITHBANK.LG", "GTCO.LG"])
-    print("\n--- Fundamentals Summary ---")
-    print(data["fundamentals"][["symbol", "company_name", "trailing_pe", "dividend_yield"]])
+    ohlcv_dict, macro_df = fetch_all_ngx_data(symbols=["ZENITHBANK.LG", "GTCO.LG"])
+    print("\n--- OHLCV Keys Loaded ---")
+    print(list(ohlcv_dict.keys()))
     print("\n--- Macro Indicators ---")
-    print(data["macro_indicators"].tail(3))
+    print(macro_df.tail(3))
