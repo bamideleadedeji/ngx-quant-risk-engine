@@ -18,7 +18,7 @@ Key Features:
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Union, List, Any
 from statsmodels.tsa.stattools import adfuller
 
 
@@ -63,7 +63,7 @@ def compute_log_returns(df: pd.DataFrame, price_col: str = "Close") -> pd.DataFr
 def add_technical_momentum_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Constructs rolling volatility windows and technical momentum indicators:
-    - Rolling Realized Volatility (20-day, 60-day, 90-day)
+    - Rolling Realized Annualized Volatility (20-day, 60-day, 90-day)
     - Exponential Moving Averages (EMA 9, 21, 50, 200)
     - Relative Strength Index (RSI 14)
     - Moving Average Convergence Divergence (MACD & Signal Line)
@@ -121,11 +121,11 @@ def integrate_macro_features(df: pd.DataFrame, macro_df: pd.DataFrame) -> pd.Dat
     """
     df = df.copy()
     
-    if macro_df.empty:
+    if macro_df is None or macro_df.empty:
         # Fallback if macro data is unpopulated
         df["CBN_MPR_Pct"] = 26.75
-        df["Inflation_YoY_Pct"] = 14.63
-        df["USD_NGN_Parallel"] = 1620.0
+        df["Inflation_YoY_Pct"] = 32.15
+        df["USD_NGN_Parallel"] = 1650.0
     else:
         # Forward-fill macro metrics onto daily equity timestamp index
         df = pd.merge_asof(
@@ -200,14 +200,12 @@ def build_feature_matrix(
 
 if __name__ == "__main__":
     # Local Test Execution using Phase 1 Data Ingestion
-    from src.data_ingestion import run_phase_1_pipeline
+    from src.data_ingestion import fetch_all_ngx_data
 
     print("🚀 Testing Phase 2 Feature Engineering Pipeline...")
-    raw_data = run_phase_1_pipeline(symbols=["CADBURY.LG"], start_date="2022-01-01")
+    ohlcv_series, macro_df = fetch_all_ngx_data(symbols=["CADBURY.LG"], start_date="2022-01-01")
     
-    cadbury_ohlcv = raw_data["ohlcv_series"]["CADBURY.LG"]
-    macro_df = raw_data["macro_indicators"]
-
+    cadbury_ohlcv = ohlcv_series["CADBURY.LG"]
     feature_matrix = build_feature_matrix(cadbury_ohlcv, macro_df)
     
     print("\n✅ Phase 2 Master Feature Matrix Constructed Successfully!")
