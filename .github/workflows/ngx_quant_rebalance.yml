@@ -9,6 +9,8 @@ on:
 jobs:
   run-quant-pipeline:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Explicitly enables git push access for trade audit logs
 
     steps:
       - name: 1. Checkout Repository
@@ -42,7 +44,6 @@ jobs:
           import sys
           import os
 
-          # Guarantee project root is at top of module lookup path
           sys.path.insert(0, os.path.abspath('.'))
 
           import src.data_ingestion as di
@@ -53,23 +54,16 @@ jobs:
           print('🚀 Running NGX Quantitative Automated Rebalancing...')
 
           # 1. Ingest Data
-          if hasattr(di, 'fetch_all_ngx_data'):
-              df_ohlcv, df_macro = di.fetch_all_ngx_data()
-          elif hasattr(di, 'fetch_ngx_data'):
-              df_ohlcv, df_macro = di.fetch_ngx_data()
-          elif hasattr(di, 'ingest_ngx_data'):
-              df_ohlcv, df_macro = di.ingest_ngx_data()
-          else:
-              df_ohlcv, df_macro = di.main()
+          ohlcv_dict, macro_df = di.fetch_all_ngx_data()
           
-          # 2. Predictive Signals & Volatility Modeling
-          signals = run_predictive_pipeline(df_ohlcv)
+          # 2. Signals & Volatility Modeling
+          signals = run_predictive_pipeline(ohlcv_dict)
           
-          # 3. Portfolio Optimization (₦14,850 Bamboo Capital)
+          # 3. Risk Management & Portfolio Optimization (₦14,850 Bamboo Capital)
           portfolio_cap = 14850.0
           weights, prices = optimize_ngx_portfolio(signals, portfolio_cap)
           
-          # 4. Generate Share Lots & Execute Headless Bridge
+          # 4. Share Lots & Headless Execution Bridge
           orders, req_cash = calculate_ngx_order_lots(weights, prices, portfolio_cap)
           summary = dispatch_rebalance_orders(orders, cash_buffer_ngn=portfolio_cap - req_cash)
           
