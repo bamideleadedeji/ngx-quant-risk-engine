@@ -7,12 +7,6 @@ Description:
     Interactive executive intelligence dashboard for monitoring NGX equity 
     forecasting, GARCH volatility metrics, 1-Day 95% VaR risk caps, and automated
     rebalancing audit logs. Micro-capital friendly (supports small balances).
-
-Features:
-    - Real-time parameter controls (Portfolio Capital, VaR Confidence, SEC Fee Limits)
-    - Interactive Plotly visualizations for volatility curves and portfolio weights
-    - Isolated audit ledger table viewer for `ngx_trade_audit.csv`
-    - Execution trigger button connecting Phases 1 through 5 seamlessly
 ===============================================================================
 """
 
@@ -60,11 +54,11 @@ st.markdown("""
 st.sidebar.title("🕹️ NGX Control Panel")
 st.sidebar.markdown("---")
 
-# Execution Context
+# Execution Context (Toggles Live Broker API vs Paper Simulation)
 execution_mode = st.sidebar.radio(
     "Target Execution Mode",
     ["Paper Simulation", "Live Broker API"],
-    index=0
+    index=1  # Default set to Live Broker API for active trading
 )
 
 st.sidebar.markdown("### 💰 Capital & Risk Controls")
@@ -72,7 +66,7 @@ portfolio_capital_ngn = st.sidebar.number_input(
     "Total Portfolio Capital (₦)",
     min_value=1000.0,            # Micro-capital enabled (1k min)
     max_value=1000000000.0,
-    value=14850.0,               # Default matches Bamboo funded balance
+    value=14850.0,               # Default matches funded wallet balance
     step=500.0,
     format="%.2f"
 )
@@ -125,7 +119,7 @@ st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("Portfolio Capital", f"₦{portfolio_capital_ngn:,.2f}")
-col2.metric("Execution Mode", execution_mode, delta="Active" if execution_mode == "Live Broker API" else "Simulated")
+col2.metric("Execution Mode", execution_mode, delta="Active Live" if execution_mode == "Live Broker API" else "Simulated")
 col3.metric("Selected Universe", f"{len(selected_symbols)} Stocks")
 col4.metric("Fee Hurdle Limit", f"{sec_fee_hurdle * 100:.1f}%")
 
@@ -136,7 +130,7 @@ st.markdown("---")
 # Main Action: Run Quantitative Pipeline Button
 # =============================================================================
 if st.button("🚀 Execute Quantitative Pipeline & Risk Rebalance"):
-    with st.spinner("Executing Phase 1 to Phase 5 Quantitative Pipeline..."):
+    with st.spinner(f"Executing Pipeline in [{execution_mode}] mode..."):
         
         # Step 1: Data Ingestion
         st.subheader("1. Ingesting NGX Equities & CBN Macro Data")
@@ -259,11 +253,17 @@ if st.button("🚀 Execute Quantitative Pipeline & Risk Rebalance"):
             st.markdown("##### Generated Trade Orders Payload")
             st.dataframe(pd.DataFrame(orders), use_container_width=True)
 
+            # ✅ PASS execution_mode TO DISPATCH FUNCTION
             dispatch_res = dispatch_rebalance_orders(
                 orders=orders,
-                cash_buffer_ngn=opt_results["cash_buffer_ngn"]
+                cash_buffer_ngn=opt_results["cash_buffer_ngn"],
+                execution_mode=execution_mode
             )
-            st.success(f"✅ Rebalance Dispatch Complete! Logged {dispatch_res['orders_count']} orders to audit ledger.")
+            
+            if execution_mode == "Live Broker API":
+                st.success(f"🚀 Live Broker Rebalance Complete! Dispatched {dispatch_res['orders_count']} orders to broker interface.")
+            else:
+                st.info(f"📋 Paper Rebalance Simulation Complete! Logged {dispatch_res['orders_count']} orders to audit ledger.")
         else:
             st.warning("⚠️ No trade orders generated. Capital preserved in NGN liquid buffer.")
 
