@@ -5,12 +5,8 @@ File: src/bamboo_bridge.py
 ===============================================================================
 Description:
     Automates 100% hands-off order execution on Bamboo using Playwright.
-    Logs into the Bamboo web interface, verifies live order book ask depth,
-    and submits market/limit buy orders automatically upon receiving strong buy signals.
-
-Dependencies:
-    pip install playwright
-    playwright install chromium
+    Logs into the Bamboo web interface, searches for target NGX equities,
+    inputs calculated share lots, and verifies order fill receipts.
 ===============================================================================
 """
 
@@ -28,16 +24,13 @@ SESSION_FILE = "bamboo_session.json"
 
 def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Launches a headless Chromium instance, authenticates with Bamboo using session
-    persistence, navigates to the target stock symbol, inputs the calculated share lot,
-    and verifies receipt confirmation before returning status.
+    Launches a headless Chromium instance, authenticates with Bamboo, uses in-app
+    search to navigate to the target NGX equity, and verifies order completion.
     """
-    # 1. Fetch Credentials from Environment / Streamlit Secrets
     email = os.environ.get("BAMBOO_EMAIL")
     password = os.environ.get("BAMBOO_PASSWORD")
     pin = os.environ.get("BAMBOO_PIN", "1234")
 
-    # Fallback check for Streamlit runtime secrets
     if not email or not password:
         try:
             import streamlit as st
@@ -67,7 +60,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
 
-        # Use stored session if available to bypass 2FA / Login prompts
+        # Load session state if available
         if os.path.exists(SESSION_FILE):
             print("🔑 Found existing session state. Loading cookies...")
             context = browser.new_context(
@@ -82,82 +75,80 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         page = context.new_page()
 
         try:
-            # Step 1: Navigate to Bamboo & Authenticate if necessary
+            # Step 1: Navigate & Authenticate
             page.goto(BAMBOO_LOGIN_URL, timeout=30000, wait_until="networkidle")
             page.wait_for_timeout(2000)
 
-            # Check if login form is presented
             if page.locator("input[type='email'], input[name='email']").is_visible():
                 print("🔑 Authenticating with Bamboo Web Interface...")
                 page.fill("input[type='email'], input[name='email']", email)
                 page.fill("input[type='password'], input[name='password']", password)
                 
-                # Click submit button flexibly
                 login_btn = page.locator("button[type='submit'], button:has-text('Log In'), button:has-text('Sign In')").first
                 login_btn.click()
                 page.wait_for_timeout(3000)
 
-                # Step 2: Handle Security PIN Prompt if present
-                pin_input = page.locator("input[type='password'], input[type='tel']")
-                if pin_input.count() >= 4:
+                # Step 2: Handle Security PIN
+                pin_inputs = page.locator("input[type='password'], input[type='tel']")
+                if pin_inputs.count() >= 4:
                     print("🔒 Entering Security PIN...")
                     for idx, char in enumerate(str(pin)):
-                        if idx < pin_input.count():
-                            pin_input.nth(idx).fill(char)
+                        if idx < pin_inputs.count():
+                            pin_inputs.nth(idx).fill(char)
                     page.wait_for_timeout(2000)
 
-                # Save session state after successful authentication
                 context.storage_state(path=SESSION_FILE)
-                print("✅ Session saved to bamboo_session.json")
 
-            # Step 3: Navigate Directly to Target Equity Stock Page
-            stock_url = f"https://app.investbamboo.com/stocks/{symbol}"
-            print(f"🔍 Navigating to order page: {stock_url}")
-            page.goto(stock_url, timeout=30000, wait_until="networkidle")
+            # Step 3: Search for Stock Ticker (Fixes 404 Error)
+            print(f"🔍 In-App Search for NGX Equity: {symbol}...")
+            
+            # Click search input
+            search_bar = page.locator("input[placeholder*='Search'], input[type='search'], svg[data-icon='search']").first
+            search_bar.click()
+            search_bar.fill(symbol)
             page.wait_for_timeout(2000)
 
-            # Step 4: Open Order Form & Fill Share Lot
-            print(f"⚡ Setting order parameters: {units} shares of {symbol}...")
+            # Click the matching stock item from search results
+            stock_result = page.locator(f"text='{symbol}'").first
+            if stock_result.is_visible():
+                stock_result.click()
+                page.wait_for_timeout(2000)
+            else:
+                # Direct fallback query route
+                page.goto(f"https://app.investbamboo.com/app/trade?search={symbol}", timeout=30000, wait_until="networkidle")
+                page.wait_for_timeout(2000)
+
+            # Step 4: Execute Order
+            print(f"⚡ Entering order parameters: {units} shares of {symbol}...")
             
-            # Click Buy Button / Tab
-            buy_btn = page.locator("button:has-text('Buy'), tab:has-text('Buy')").first
+            buy_btn = page.locator("button:has-text('Buy')").first
             if buy_btn.is_visible():
                 buy_btn.click()
                 page.wait_for_timeout(1000)
 
-            # Locate Share Quantity Field
             qty_input = page.locator("input[name='quantity'], input[name='shares'], input[placeholder='0']").first
             if qty_input.is_visible():
                 qty_input.fill(str(units))
             else:
-                print("⚠️ Primary input selector missed. Using fallback focused input...")
                 page.keyboard.type(str(units))
 
             page.wait_for_timeout(1000)
 
-            # Step 5: Review Order
             review_btn = page.locator("button:has-text('Review Order'), button:has-text('Review')").first
             if review_btn.is_visible():
                 review_btn.click()
                 page.wait_for_timeout(1500)
 
-            # Step 6: Submit & VERIFY Execution Receipt
             confirm_btn = page.locator("button:has-text('Submit Order'), button:has-text('Confirm Buy')").first
             if not confirm_btn.is_visible():
-                # Screenshot failure state for debugging
                 page.screenshot(path=f"bamboo_failure_{symbol}.png")
                 browser.close()
-                print(f"❌ Could not locate confirmation button for {symbol}. Saved debug screenshot.")
                 return {"status": "FAILED", "reason": "CONFIRM_BUTTON_NOT_FOUND"}
 
             confirm_btn.click()
             
-            # CRITICAL ASSERTION: Wait up to 15 seconds for Order Receipt confirmation element
-            print("⏳ Waiting for broker order confirmation receipt...")
             receipt = page.wait_for_selector(".order-success, .receipt-modal, text='Order Submitted'", timeout=15000)
-
             if receipt:
-                print(f"✅ Verified Order Fill Receipt for {units} shares of {symbol}!")
                 context.storage_state(path=SESSION_FILE)
                 browser.close()
                 return {
@@ -170,31 +161,13 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 page.screenshot(path=f"bamboo_failure_{symbol}.png")
                 browser.close()
-                print(f"❌ Order submitted but receipt confirmation timed out. Saved screenshot.")
                 return {"status": "FAILED", "reason": "RECEIPT_CONFIRMATION_TIMEOUT"}
 
         except PlaywrightTimeoutError as te:
-            print(f"❌ Execution Timeout on Bamboo Web Interface: {str(te)}")
             page.screenshot(path=f"bamboo_timeout_{symbol}.png")
             browser.close()
             return {"status": "FAILED", "reason": "TIMEOUT_ERROR"}
         except Exception as err:
-            print(f"❌ Headless Bridge Exception: {str(err)}")
             page.screenshot(path=f"bamboo_error_{symbol}.png")
             browser.close()
             return {"status": "FAILED", "reason": str(err)}
-
-
-if __name__ == "__main__":
-    print("🚀 Testing Headless Browser Execution Bridge locally...")
-    
-    test_order = {
-        "symbol": "ZENITHBANK",
-        "units": 118,
-        "unit_price_ngn": 61.63,
-        "action": "BUY"
-    }
-    
-    execution_result = execute_bamboo_trade_headless(test_order)
-    print("\n--- Execution Bridge Result ---")
-    print(json.dumps(execution_result, indent=2))
