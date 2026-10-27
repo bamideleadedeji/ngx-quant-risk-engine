@@ -2,8 +2,8 @@ name: NGX Quant Engine — Automated Rebalance & Execution
 
 on:
   schedule:
-    # 10:00 AM WAT (UTC+1) = 09:00 AM UTC, Monday through Friday
-    - cron: '0 9 * * 1-5'
+    # 10:30 AM WAT (UTC+1) = 09:30 AM UTC, Monday through Friday (Active NGX Continuous Trading)
+    - cron: '30 9 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub Actions UI
 
 jobs:
@@ -31,7 +31,13 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
-      - name: 5. Execute Quantitative Pipeline & Headless Trade Bridge
+      - name: 5. Restore Bamboo Session State
+        uses: actions/cache@v4
+        with:
+          path: bamboo_session.json
+          key: bamboo-session-${{ runner.os }}
+
+      - name: 6. Execute Quantitative Pipeline & Headless Trade Bridge
         env:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -70,10 +76,18 @@ jobs:
           print('✅ Execution Summary:', summary)
           "
 
-      - name: 6. Commit & Push Updated Trade Audit Log
+      - name: 7. Commit & Push Updated Trade Audit Log & Session
+        if: always()
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add ngx_trade_audit.csv || true
+          git add ngx_trade_audit.csv bamboo_session.json || true
           git commit -m "auto: append timestamped trade execution audit log" || true
-          git push
+          git push || true
+
+      - name: 8. Upload Debug Screenshots on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-screenshots
+          path: "*.png"
