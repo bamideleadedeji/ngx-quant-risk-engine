@@ -21,14 +21,16 @@ import json
 from typing import Dict, Any, Optional
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-# Target Bamboo Authentication Endpoint
+# Target Bamboo Endpoints
 BAMBOO_LOGIN_URL = "https://app.investbamboo.com/login"
+SESSION_FILE = "bamboo_session.json"
 
 
 def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Launches a headless Chromium instance, authenticates with Bamboo, navigates 
-    to the target stock symbol, inputs the calculated share lot, and confirms execution.
+    Launches a headless Chromium instance, authenticates with Bamboo using session
+    persistence, navigates to the target stock symbol, inputs the calculated share lot,
+    and verifies receipt confirmation before returning status.
     """
     # 1. Fetch Credentials from Environment / Streamlit Secrets
     email = os.environ.get("BAMBOO_EMAIL")
@@ -60,88 +62,125 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     print(f"🚀 Initializing Headless Execution Bridge for {symbol} ({units} shares @ ₦{target_price:,.2f})...")
 
     with sync_playwright() as p:
-        # Launch Chromium in Headless Mode with Container Optimization Flags
         browser = p.chromium.launch(
             headless=True,
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+
+        # Use stored session if available to bypass 2FA / Login prompts
+        if os.path.exists(SESSION_FILE):
+            print("🔑 Found existing session state. Loading cookies...")
+            context = browser.new_context(
+                storage_state=SESSION_FILE,
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+        else:
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+
         page = context.new_page()
 
         try:
-            # Step 1: Navigate & Authenticate
-            print("🔑 Logging into Bamboo Web Interface...")
+            # Step 1: Navigate to Bamboo & Authenticate if necessary
             page.goto(BAMBOO_LOGIN_URL, timeout=30000, wait_until="networkidle")
-            
-            page.fill("input[type='email'], input[name='email']", email)
-            page.fill("input[type='password'], input[name='password']", password)
-            page.click("button[type='submit']")
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2000)
 
-            # Step 2: Handle 4-Digit Security PIN Prompt if Encountered
-            pin_fields = page.query_selector_all("input[type='password'], input[type='tel']")
-            if pin_fields and len(pin_fields) >= 4:
-                print("🔒 Security PIN prompt detected. Entering PIN...")
-                for idx, char in enumerate(str(pin)):
-                    if idx < len(pin_fields):
-                        pin_fields[idx].fill(char)
-                page.wait_for_timeout(2000)
+            # Check if login form is presented
+            if page.locator("input[type='email'], input[name='email']").is_visible():
+                print("🔑 Authenticating with Bamboo Web Interface...")
+                page.fill("input[type='email'], input[name='email']", email)
+                page.fill("input[type='password'], input[name='password']", password)
+                
+                # Click submit button flexibly
+                login_btn = page.locator("button[type='submit'], button:has-text('Log In'), button:has-text('Sign In')").first
+                login_btn.click()
+                page.wait_for_timeout(3000)
+
+                # Step 2: Handle Security PIN Prompt if present
+                pin_input = page.locator("input[type='password'], input[type='tel']")
+                if pin_input.count() >= 4:
+                    print("🔒 Entering Security PIN...")
+                    for idx, char in enumerate(str(pin)):
+                        if idx < pin_input.count():
+                            pin_input.nth(idx).fill(char)
+                    page.wait_for_timeout(2000)
+
+                # Save session state after successful authentication
+                context.storage_state(path=SESSION_FILE)
+                print("✅ Session saved to bamboo_session.json")
 
             # Step 3: Navigate Directly to Target Equity Stock Page
-            stock_url = f"https://app.investbamboo.com/trade/stock/{symbol}"
+            stock_url = f"https://app.investbamboo.com/stocks/{symbol}"
             print(f"🔍 Navigating to order page: {stock_url}")
             page.goto(stock_url, timeout=30000, wait_until="networkidle")
             page.wait_for_timeout(2000)
 
             # Step 4: Open Order Form & Fill Share Lot
-            print(f"⚡ Entering order parameters: {units} shares of {symbol}...")
+            print(f"⚡ Setting order parameters: {units} shares of {symbol}...")
             
-            # Click Buy Tab
-            buy_tab = page.query_selector("button:has-text('Buy'), tab:has-text('Buy')")
-            if buy_tab:
-                buy_tab.click()
+            # Click Buy Button / Tab
+            buy_btn = page.locator("button:has-text('Buy'), tab:has-text('Buy')").first
+            if buy_btn.is_visible():
+                buy_btn.click()
                 page.wait_for_timeout(1000)
 
-            # Locate Quantity Input
-            qty_input = page.query_selector("input[name='quantity'], input[name='shares'], input[placeholder='0']")
-            if qty_input:
+            # Locate Share Quantity Field
+            qty_input = page.locator("input[name='quantity'], input[name='shares'], input[placeholder='0']").first
+            if qty_input.is_visible():
                 qty_input.fill(str(units))
             else:
-                print("⚠️ Specific quantity selector missed. Attempting generic input fill...")
-                page.type("input", str(units))
+                print("⚠️ Primary input selector missed. Using fallback focused input...")
+                page.keyboard.type(str(units))
 
             page.wait_for_timeout(1000)
 
-            # Step 5: Review Order & Submit Execution
-            review_btn = page.query_selector("button:has-text('Review Order'), button:has-text('Review')")
-            if review_btn:
+            # Step 5: Review Order
+            review_btn = page.locator("button:has-text('Review Order'), button:has-text('Review')").first
+            if review_btn.is_visible():
                 review_btn.click()
                 page.wait_for_timeout(1500)
 
-            confirm_btn = page.query_selector("button:has-text('Submit Order'), button:has-text('Confirm Buy'), button:has-text('Buy')")
-            if confirm_btn:
-                confirm_btn.click()
-                page.wait_for_timeout(3000)
+            # Step 6: Submit & VERIFY Execution Receipt
+            confirm_btn = page.locator("button:has-text('Submit Order'), button:has-text('Confirm Buy')").first
+            if not confirm_btn.is_visible():
+                # Screenshot failure state for debugging
+                page.screenshot(path=f"bamboo_failure_{symbol}.png")
+                browser.close()
+                print(f"❌ Could not locate confirmation button for {symbol}. Saved debug screenshot.")
+                return {"status": "FAILED", "reason": "CONFIRM_BUTTON_NOT_FOUND"}
 
-            print(f"✅ Executed {units} shares of {symbol} successfully via Headless Bridge!")
-            browser.close()
+            confirm_btn.click()
             
-            return {
-                "status": "FILLED",
-                "symbol": symbol,
-                "units": units,
-                "target_price": target_price,
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
+            # CRITICAL ASSERTION: Wait up to 15 seconds for Order Receipt confirmation element
+            print("⏳ Waiting for broker order confirmation receipt...")
+            receipt = page.wait_for_selector(".order-success, .receipt-modal, text='Order Submitted'", timeout=15000)
+
+            if receipt:
+                print(f"✅ Verified Order Fill Receipt for {units} shares of {symbol}!")
+                context.storage_state(path=SESSION_FILE)
+                browser.close()
+                return {
+                    "status": "FILLED",
+                    "symbol": symbol,
+                    "units": units,
+                    "target_price": target_price,
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+            else:
+                page.screenshot(path=f"bamboo_failure_{symbol}.png")
+                browser.close()
+                print(f"❌ Order submitted but receipt confirmation timed out. Saved screenshot.")
+                return {"status": "FAILED", "reason": "RECEIPT_CONFIRMATION_TIMEOUT"}
 
         except PlaywrightTimeoutError as te:
             print(f"❌ Execution Timeout on Bamboo Web Interface: {str(te)}")
+            page.screenshot(path=f"bamboo_timeout_{symbol}.png")
             browser.close()
             return {"status": "FAILED", "reason": "TIMEOUT_ERROR"}
         except Exception as err:
             print(f"❌ Headless Bridge Exception: {str(err)}")
+            page.screenshot(path=f"bamboo_error_{symbol}.png")
             browser.close()
             return {"status": "FAILED", "reason": str(err)}
 
