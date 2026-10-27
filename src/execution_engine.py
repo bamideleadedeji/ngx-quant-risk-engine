@@ -51,10 +51,10 @@ MIN_ORDER_VALUE_NGN = 1_000.0  # ₦1,000 minimum trade size for micro-capital t
 # =============================================================================
 # Telegram Signal Dispatcher
 # =============================================================================
-def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) -> bool:
+def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float, execution_status: str, ticket_info: str = "") -> bool:
     """
-    Dispatches live execution signals directly to your phone via Telegram bot.
-    Reads credentials from Streamlit Secrets or Environment variables.
+    Dispatches live execution telemetry directly to Telegram.
+    Fires ONLY after Playwright browser execution attempt finishes.
     """
     bot_token = None
     chat_id = None
@@ -77,17 +77,23 @@ def send_telegram_trade_signal(order: Dict[str, Any], cash_buffer_ngn: float) ->
         print("⚠️ Telegram credentials missing in Streamlit secrets / os.environ.")
         return False
 
+    if execution_status in ["FILLED", "FILLED_AUTOTRADE"]:
+        status_header = "🚀 *NGX QUANT ENGINE — TRADE EXECUTED*"
+        status_body = f"✅ *Broker Order Status:* `FILLED`\n🧾 *Receipt:* `{ticket_info}`"
+    else:
+        status_header = "⚠️ *NGX QUANT ENGINE — EXECUTION FAILED*"
+        status_body = f"❌ *Broker Order Status:* `FAILED`\n🔍 *Reason:* `{ticket_info}`"
+
     message = (
-        "🚀 *NGX QUANT ENGINE — LIVE TRADE SIGNAL*\n\n"
+        f"{status_header}\n\n"
         f"📌 *Action:* `{order.get('action', 'BUY')}`\n"
         f"📈 *Ticker:* `{order.get('symbol')}`\n"
-        f"🔢 *Units to Buy:* `{order.get('units', 0):,} shares`\n"
+        f"🔢 *Units:* `{order.get('units', 0):,} shares`\n"
         f"💵 *Target Price:* `₦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
         f"💰 *Gross Value:* `₦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
         f"🧾 *Est. Fees (1.39%):* `₦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
         f"💼 *Wallet Cash Remaining:* `₦{cash_buffer_ngn:,.2f}`\n\n"
-        "📲 *Execution Status:*\n"
-        "🤖 *Headless Bridge:* Executing automatically via Playwright..."
+        f"📲 *Execution Outcome:*\n{status_body}"
     )
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -180,22 +186,32 @@ def dispatch_rebalance_orders(
     log_filepath: str = "ngx_trade_audit.csv"
 ) -> Dict[str, Any]:
     """
-    Dispatches trade orders via Telegram, triggers the Playwright Headless Bridge,
-    and appends timestamped records to persistent CSV audit ledger.
+    Triggers Playwright Headless Bridge FIRST, verifies execution result, 
+    dispatches Telegram alerts with true fill status, and records to CSV ledger.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     dispatched_records = []
 
     for order in orders:
-        # 1. Send Instant Telegram Alert
-        send_telegram_trade_signal(order, cash_buffer_ngn)
+        execution_status = "FAILED"
+        ticket_info = "NO_BRIDGE_LOADED"
 
-        # 2. Trigger Hands-Free Automated Playwright Bridge (Pathway B)
-        execution_status = "DISPATCHED_PENDING_FILL"
+        # 1. Trigger Hands-Free Automated Playwright Bridge FIRST
         if execute_bamboo_trade_headless is not None:
+            print(f"⚡ Dispatching Playwright headless order for {order['symbol']}...")
             bridge_res = execute_bamboo_trade_headless(order)
+            
             if bridge_res.get("status") == "FILLED":
                 execution_status = "FILLED_AUTOTRADE"
+                ticket_info = f"FILLED_{bridge_res.get('timestamp', timestamp)}"
+            else:
+                execution_status = f"FAILED_{bridge_res.get('reason', 'UNKNOWN')}"
+                ticket_info = bridge_res.get("reason", "EXECUTION_ERROR")
+        else:
+            print("⚠️ Playwright execute_bamboo_trade_headless module not imported.")
+
+        # 2. Send Telegram Alert ONLY AFTER Browser Execution Attempt Completes
+        send_telegram_trade_signal(order, cash_buffer_ngn, execution_status, ticket_info)
 
         record = {
             "Timestamp": timestamp,
