@@ -5,8 +5,8 @@ File: src/bamboo_bridge.py
 ===============================================================================
 Description:
     Automates 100% hands-off order execution on Bamboo using Playwright.
-    Logs into the Bamboo web interface, searches for target NGX equities,
-    inputs calculated share lots, and verifies order fill receipts.
+    Logs into Bamboo web interface, navigates to target NGX equities,
+    inputs share lots, and asserts order completion receipts.
 ===============================================================================
 """
 
@@ -25,7 +25,7 @@ SESSION_FILE = "bamboo_session.json"
 def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     """
     Launches a headless Chromium instance, authenticates with Bamboo, uses in-app
-    search to navigate to the target NGX equity, and verifies order completion.
+    search to navigate to target NGX equity, and verifies order completion.
     """
     email = os.environ.get("BAMBOO_EMAIL")
     password = os.environ.get("BAMBOO_PASSWORD")
@@ -60,7 +60,6 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
             args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
         )
 
-        # Load session state if available
         if os.path.exists(SESSION_FILE):
             print("🔑 Found existing session state. Loading cookies...")
             context = browser.new_context(
@@ -75,56 +74,53 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         page = context.new_page()
 
         try:
-            # Step 1: Navigate & Authenticate
-            page.goto(BAMBOO_LOGIN_URL, timeout=30000, wait_until="networkidle")
-            page.wait_for_timeout(2000)
+            # Step 1: Authenticate
+            page.goto(BAMBOO_LOGIN_URL, timeout=45000, wait_until="networkidle")
+            page.wait_for_timeout(3000)
 
-            if page.locator("input[type='email'], input[name='email']").is_visible():
+            email_input = page.locator("input[type='email'], input[name='email']").first
+            if email_input.is_visible():
                 print("🔑 Authenticating with Bamboo Web Interface...")
-                page.fill("input[type='email'], input[name='email']", email)
+                email_input.fill(email)
                 page.fill("input[type='password'], input[name='password']", password)
                 
                 login_btn = page.locator("button[type='submit'], button:has-text('Log In'), button:has-text('Sign In')").first
                 login_btn.click()
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(4000)
 
-                # Step 2: Handle Security PIN
+                # Step 2: Security PIN Check
                 pin_inputs = page.locator("input[type='password'], input[type='tel']")
                 if pin_inputs.count() >= 4:
                     print("🔒 Entering Security PIN...")
                     for idx, char in enumerate(str(pin)):
                         if idx < pin_inputs.count():
                             pin_inputs.nth(idx).fill(char)
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(3000)
 
                 context.storage_state(path=SESSION_FILE)
 
-            # Step 3: Search for Stock Ticker (Fixes 404 Error)
-            print(f"🔍 In-App Search for NGX Equity: {symbol}...")
+            # Step 3: In-App Search with Explicit Wait
+            print(f"🔍 Searching for NGX Equity: {symbol}...")
             
-            # Click search input
-            search_bar = page.locator("input[placeholder*='Search'], input[type='search'], svg[data-icon='search']").first
-            search_bar.click()
-            search_bar.fill(symbol)
-            page.wait_for_timeout(2000)
+            # Direct search navigation parameter fallback
+            page.goto(f"https://app.investbamboo.com/app/trade?search={symbol}", timeout=45000, wait_until="networkidle")
+            page.wait_for_timeout(3000)
 
-            # Click the matching stock item from search results
-            stock_result = page.locator(f"text='{symbol}'").first
-            if stock_result.is_visible():
-                stock_result.click()
-                page.wait_for_timeout(2000)
-            else:
-                # Direct fallback query route
-                page.goto(f"https://app.investbamboo.com/app/trade?search={symbol}", timeout=30000, wait_until="networkidle")
-                page.wait_for_timeout(2000)
+            # Locate stock item or buy trigger
+            buy_btn = page.locator("button:has-text('Buy'), tab:has-text('Buy')").first
+            if not buy_btn.is_visible():
+                stock_item = page.locator(f"text='{symbol}'").first
+                if stock_item.is_visible():
+                    stock_item.click()
+                    page.wait_for_timeout(2000)
 
-            # Step 4: Execute Order
-            print(f"⚡ Entering order parameters: {units} shares of {symbol}...")
+            # Step 4: Fill Share Quantity & Submit
+            print(f"⚡ Setting order quantity: {units} shares of {symbol}...")
             
             buy_btn = page.locator("button:has-text('Buy')").first
             if buy_btn.is_visible():
                 buy_btn.click()
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(1500)
 
             qty_input = page.locator("input[name='quantity'], input[name='shares'], input[placeholder='0']").first
             if qty_input.is_visible():
@@ -132,16 +128,16 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 page.keyboard.type(str(units))
 
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(1500)
 
             review_btn = page.locator("button:has-text('Review Order'), button:has-text('Review')").first
             if review_btn.is_visible():
                 review_btn.click()
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(2000)
 
             confirm_btn = page.locator("button:has-text('Submit Order'), button:has-text('Confirm Buy')").first
             if not confirm_btn.is_visible():
-                page.screenshot(path=f"bamboo_failure_{symbol}.png")
+                page.screenshot(path=f"bamboo_timeout_{symbol}.png")
                 browser.close()
                 return {"status": "FAILED", "reason": "CONFIRM_BUTTON_NOT_FOUND"}
 
@@ -159,7 +155,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
                 }
             else:
-                page.screenshot(path=f"bamboo_failure_{symbol}.png")
+                page.screenshot(path=f"bamboo_timeout_{symbol}.png")
                 browser.close()
                 return {"status": "FAILED", "reason": "RECEIPT_CONFIRMATION_TIMEOUT"}
 
