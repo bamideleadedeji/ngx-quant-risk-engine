@@ -85,9 +85,10 @@ jobs:
           git commit -m "auto: append timestamped trade execution audit log" || true
           git push || true
 
-      - name: 8. Upload Debug Screenshots on Failure
-        if: failure()
+      - name: 8. Upload Debug Screenshots Always
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-failure-screenshots
-          path: "*.png"
+          path: "**/*.png"
+          if-no-files-found: ignore
