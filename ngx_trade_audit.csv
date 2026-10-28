@@ -15,3 +15,19 @@ Timestamp,Symbol,Action,Units,UnitPrice_NGN,GrossValue_NGN,Fees_NGN,NetCost_NGN,
 2026-10-28 13:29:07,DANGCEM,BUY,5,650.0,3250.0,45.17,3295.18,25.0,FAILED_CONFIRM_BUTTON_NOT_FOUND
 2026-10-28 13:29:07,BUACEMENT,BUY,33,110.0,3630.0,50.46,3680.46,25.0,FAILED_CONFIRM_BUTTON_NOT_FOUND
 2026-10-28 13:29:07,CADBURY,BUY,221,16.5,3646.5,50.69,3697.19,25.0,FAILED_CONFIRM_BUTTON_NOT_FOUND
+2026-10-28 13:41:41,ZENITHBANK,BUY,59,61.63,3636.17,50.54,3686.71,25.0,"FAILED_Page.wait_for_selector: Unexpected token ""="" while parsing css selector "".order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed'"". Did you mean to CSS.escape it?
+Call log:
+  - waiting for .order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed' to be visible
+"
+2026-10-28 13:41:41,DANGCEM,BUY,5,650.0,3250.0,45.17,3295.18,25.0,"FAILED_Page.wait_for_selector: Unexpected token ""="" while parsing css selector "".order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed'"". Did you mean to CSS.escape it?
+Call log:
+  - waiting for .order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed' to be visible
+"
+2026-10-28 13:41:41,BUACEMENT,BUY,33,110.0,3630.0,50.46,3680.46,25.0,"FAILED_Page.wait_for_selector: Unexpected token ""="" while parsing css selector "".order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed'"". Did you mean to CSS.escape it?
+Call log:
+  - waiting for .order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed' to be visible
+"
+2026-10-28 13:41:41,CADBURY,BUY,221,16.5,3646.5,50.69,3697.19,25.0,"FAILED_Page.wait_for_selector: Unexpected token ""="" while parsing css selector "".order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed'"". Did you mean to CSS.escape it?
+Call log:
+  - waiting for .order-success, .receipt-modal, text='Order Submitted', text='Success', text='Placed' to be visible
+"
