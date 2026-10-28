@@ -172,9 +172,13 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         review_btn.click()
         page.wait_for_timeout(2000)
 
+      # EXPANDED CONFIRM BUTTON SELECTORS FOR BAMBOO
       confirm_btn = page.locator(
-          "button:has-text('Submit Order'), button:has-text('Confirm Buy')"
+          "button:has-text('Place Order'), button:has-text('Submit Order'),"
+          " button:has-text('Confirm Buy'), button:has-text('Confirm'),"
+          " button:has-text('Buy Now'), button[type='submit']"
       ).first
+
       if not confirm_btn.is_visible():
         page.screenshot(path=f"bamboo_timeout_{symbol}.png")
         browser.close()
@@ -183,7 +187,8 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
       confirm_btn.click()
 
       receipt = page.wait_for_selector(
-          ".order-success, .receipt-modal, text='Order Submitted'",
+          ".order-success, .receipt-modal, text='Order Submitted',"
+          " text='Success'",
           timeout=15000,
       )
       if receipt:
