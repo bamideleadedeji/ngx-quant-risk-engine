@@ -5,8 +5,8 @@ File: src/bamboo_bridge.py
 ===============================================================================
 Description:
     Automates 100% hands-off order execution on Bamboo using Playwright.
-    Logs into Bamboo web interface, uses in-app search UI (avoiding 404s),
-    inputs share lots, and asserts order completion receipts.
+    Logs into Bamboo web interface, uses in-app search UI, inputs share lots,
+    presses Enter / clicks confirmation, and asserts order completion receipts.
 ===============================================================================
 """
 
@@ -128,7 +128,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
 
         context.storage_state(path=SESSION_FILE)
 
-      # Step 3: Navigate to Main Trade Dashboard (Avoids 404)
+      # Step 3: Navigate to Main Trade Dashboard
       print(f"🔍 Navigating to Bamboo Trading Dashboard...")
       page.goto(
           BAMBOO_DASHBOARD_URL, timeout=45000, wait_until="networkidle"
@@ -154,7 +154,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         )
         page.wait_for_timeout(2000)
 
-      # Step 5: Click Asset Card if present in search results
+      # Step 5: Click Asset Card if present
       stock_card = page.locator(f"text='{symbol}'").first
       if stock_card.is_visible():
         stock_card.click()
@@ -174,35 +174,38 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
       ).first
       if qty_input.is_visible():
         qty_input.fill(str(units))
+        qty_input.press("Enter")
       else:
         page.keyboard.type(str(units))
+        page.keyboard.press("Enter")
 
-      page.wait_for_timeout(1500)
+      page.wait_for_timeout(2000)
 
       review_btn = page.locator(
-          "button:has-text('Review Order'), button:has-text('Review')"
+          "button:has-text('Review Order'), button:has-text('Review'),"
+          " button:has-text('Next')"
       ).first
       if review_btn.is_visible():
         review_btn.click()
         page.wait_for_timeout(2000)
 
-      # EXPANDED CONFIRM BUTTON SELECTORS FOR BAMBOO
+      # STEP 7: BULLETPROOF CONFIRMATION BUTTON SELECTOR OR KEYBOARD ENTER
       confirm_btn = page.locator(
           "button:has-text('Place Order'), button:has-text('Submit Order'),"
           " button:has-text('Confirm Buy'), button:has-text('Confirm'),"
-          " button:has-text('Buy Now'), button[type='submit']"
+          " button:has-text('Buy Now'), button:has-text('Submit'),"
+          " button[type='submit']"
       ).first
 
-      if not confirm_btn.is_visible():
-        page.screenshot(path=f"bamboo_timeout_{symbol}.png")
-        browser.close()
-        return {"status": "FAILED", "reason": "CONFIRM_BUTTON_NOT_FOUND"}
-
-      confirm_btn.click()
+      if confirm_btn.is_visible():
+        confirm_btn.click()
+      else:
+        # Fallback: press Enter to submit modal form
+        page.keyboard.press("Enter")
 
       receipt = page.wait_for_selector(
           ".order-success, .receipt-modal, text='Order Submitted',"
-          " text='Success'",
+          " text='Success', text='Placed'",
           timeout=15000,
       )
       if receipt:
