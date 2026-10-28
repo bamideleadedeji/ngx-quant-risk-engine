@@ -147,7 +147,6 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         page.keyboard.press("Enter")
         page.wait_for_timeout(3000)
       else:
-        # Fallback: click search icon or navigate direct asset URL if available
         page.goto(
             f"https://app.investbamboo.com/app/stock/{symbol}",
             timeout=30000,
@@ -187,6 +186,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         review_btn.click()
         page.wait_for_timeout(2000)
 
+      # EXPANDED CONFIRM BUTTON SELECTORS FOR BAMBOO
       confirm_btn = page.locator(
           "button:has-text('Place Order'), button:has-text('Submit Order'),"
           " button:has-text('Confirm Buy'), button:has-text('Confirm'),"
