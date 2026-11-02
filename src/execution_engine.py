@@ -5,12 +5,14 @@ File: src/execution_engine.py
 ===============================================================================
 Description:
     Translates optimized portfolio target weights into exact integer 
-    share lots for listed equities on the Nigerian Exchange (NGX).
+    share lots for listed equities on the Nigerian Exchange (NGX) and computes
+    Smart Limit Prices for morning auction night-queueing.
 
 Features:
-    - Calculates exact round-lot integer units based on live market ask prices
+    - Calculates exact round-lot integer units based on live market prices
     - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.39% total buy cost)
     - Enforces micro-capital friendly order thresholds (₦1,000 min limit)
+    - Calculates Dynamic Smart Limit Prices (+1.5% auction buffer) to prevent overnight gap-up rejections
     - Dispatches instant execution notifications with interactive Tap-and-Execute buttons via Telegram (@ngx_quant_risk_bot)
     - Triggers hands-free execution via Playwright Headless Bridge (src/bamboo_bridge.py)
     - Appends timestamped audit logs to persistent CSV ledger (`ngx_trade_audit.csv`)
@@ -56,6 +58,18 @@ MIN_ORDER_VALUE_NGN = (
 
 
 # =============================================================================
+# Dynamic Limit Pricing for Morning Auction Queueing
+# =============================================================================
+def calculate_dynamic_limit_price(close_price: float, alpha: float = 0.015) -> float:
+    """
+    Calculates a Smart Limit Price for morning auction order queueing.
+    Sets the limit price slightly above the previous close (+1.5% default) 
+    to secure opening auction execution while guarding against overnight gap-up spikes.
+    """
+    return round(close_price * (1.0 + alpha), 2)
+
+
+# =============================================================================
 # Telegram Signal Dispatcher (Interactive Tap-and-Execute)
 # =============================================================================
 def send_telegram_trade_signal(
@@ -88,20 +102,23 @@ def send_telegram_trade_signal(
         return False
 
     if execution_status in ["FILLED", "FILLED_AUTOTRADE"]:
-        status_header = "🚀 *NGX QUANT ENGINE — TRADE EXECUTED*"
+        status_header = "🚀 *NGX QUANT ENGINE — NIGHT-QUEUE SIGNAL DISPATCHED*"
         status_body = (
-            f"✅ *Broker Order Status:* `FILLED`\n🧾 *Receipt:* `{ticket_info}`"
+            f"✅ *Queue Status:* `QUEUED_FOR_AUCTION`\n🧾 *Receipt:* `{ticket_info}`"
         )
     else:
-        status_header = "⚠️ *NGX QUANT ENGINE — EXECUTION PENDING APPROVAL*"
-        status_body = f"❌ *Broker Order Status:* `PENDING TAP`\n🔍 *Reason:* `{ticket_info}`"
+        status_header = "🌙 *NGX QUANT ENGINE — NIGHT-QUEUE PREP*"
+        status_body = f"❌ *Broker Order Status:* `PENDING NIGHT QUEUE`\n🔍 *Reason:* `{ticket_info}`"
+
+    smart_limit = order.get('smart_limit_price_ngn', order.get('unit_price_ngn', 0.0))
 
     message = (
         f"{status_header}\n\n"
         f"📌 *Action:* `{order.get('action', 'BUY')}`\n"
         f"📈 *Ticker:* `{order.get('symbol')}`\n"
         f"🔢 *Units:* `{order.get('units', 0):,} shares`\n"
-        f"💵 *Target Price:* `₦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
+        f"💵 *Prev Close:* `₦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
+        f"🎯 *Smart Limit Price:* `₦{smart_limit:,.2f} (+1.5% Buffer)`\n"
         f"💰 *Gross Value:* `₦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
         f"🧾 *Est. Fees (1.39%):* `₦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
         f"💼 *Wallet Cash Remaining:* `₦{cash_buffer_ngn:,.2f}`\n\n"
@@ -113,7 +130,7 @@ def send_telegram_trade_signal(
         "inline_keyboard": [
             [
                 {
-                    "text": f"✅ Tap & Execute {order.get('symbol')}",
+                    "text": f"✅ Queue {order.get('units', 0):,} of {order.get('symbol')}",
                     "callback_data": f"EXEC_{order.get('symbol')}_{order.get('units', 0)}",
                 }
             ]
@@ -137,16 +154,16 @@ def send_telegram_trade_signal(
 
 
 # =============================================================================
-# 5.1 Share Lot Calculation & Fee Deduction
+# 5.1 Share Lot Calculation, Smart Limit Pricing & Fee Deduction
 # =============================================================================
 def calculate_ngx_order_lots(
     target_weights: Dict[str, float],
     latest_prices: Dict[str, float],
     portfolio_value_ngn: float,
 ) -> Tuple[List[Dict[str, Any]], float]:
-    """Converts target percentage weights into exact discrete integer share units
+    """Converts target percentage weights into exact discrete integer share units,
 
-    and calculates fee breakdowns for NGX execution.
+    calculates Dynamic Smart Limit Prices (+1.5%), and computes fee breakdowns for NGX execution.
     """
     orders = []
     total_cash_required = 0.0
@@ -176,9 +193,11 @@ def calculate_ngx_order_lots(
         if gross_units <= 0:
             continue
 
-        gross_value = gross_units * price
+        # Calculate Dynamic Smart Limit Price for morning auction
+        smart_limit_price = calculate_dynamic_limit_price(price)
+        gross_value = gross_units * smart_limit_price
 
-        # Fee Breakdown
+        # Fee Breakdown based on smart limit valuation
         broker_fee = gross_value * BROKER_COMMISSION_PCT
         sec_fee = gross_value * SEC_FEE_PCT
         stamp_duty = gross_value * NSE_STAMP_DUTY_PCT
@@ -193,6 +212,7 @@ def calculate_ngx_order_lots(
             "action": "BUY",
             "units": gross_units,
             "unit_price_ngn": price,
+            "smart_limit_price_ngn": smart_limit_price,
             "gross_value_ngn": round(gross_value, 2),
             "broker_fee_ngn": round(broker_fee, 2),
             "sec_fee_ngn": round(sec_fee, 2),
@@ -222,8 +242,8 @@ def dispatch_rebalance_orders(
     dispatched_records = []
 
     for order in orders:
-        execution_status = "PENDING_TAP"
-        ticket_info = "AWAITING_TELEGRAM_TAP"
+        execution_status = "PENDING_NIGHT_QUEUE"
+        ticket_info = "AWAITING_MORNING_AUCTION"
 
         # 1. Trigger Hands-Free Automated Playwright Bridge FIRST (if available)
         if execute_bamboo_trade_headless is not None:
@@ -256,6 +276,7 @@ def dispatch_rebalance_orders(
             "Action": order["action"],
             "Units": order["units"],
             "UnitPrice_NGN": order["unit_price_ngn"],
+            "SmartLimitPrice_NGN": order["smart_limit_price_ngn"],
             "GrossValue_NGN": order["gross_value_ngn"],
             "Fees_NGN": order["total_fee_ngn"],
             "NetCost_NGN": order["total_net_cost_ngn"],
@@ -288,7 +309,7 @@ def dispatch_rebalance_orders(
 
 
 if __name__ == "__main__":
-    print("🚀 Testing Phase 5 Automated Rebalancing & Execution Engine...")
+    print("🚀 Testing Phase 5 Automated Rebalancing & Execution Engine with Dynamic Limit Pricing...")
 
     mock_weights = {"ZENITHBANK.LG": 0.50, "GTCO.LG": 0.50}
     mock_prices = {"ZENITHBANK.LG": 61.63, "GTCO.LG": 47.71}
