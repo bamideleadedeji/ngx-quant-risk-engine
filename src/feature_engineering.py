@@ -118,19 +118,30 @@ def integrate_macro_features(df: pd.DataFrame, macro_df: pd.DataFrame) -> pd.Dat
     """
     Merges CBN macroeconomic drivers (MPR, Inflation, USD/NGN FX) with equity price series
     and computes macro-adjusted interaction variables.
+    Enforces timezone-naive datetime indexing to prevent pandas MergeError.
     """
     df = df.copy()
     
+    # Ensure tz-naive datetime index for df
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
+        
     if macro_df is None or macro_df.empty:
-        # Fallback if macro data is unpopulated
         df["CBN_MPR_Pct"] = 26.75
         df["Inflation_YoY_Pct"] = 32.15
         df["USD_NGN_Parallel"] = 1650.0
     else:
-        # Forward-fill macro metrics onto daily equity timestamp index
+        macro_clean = macro_df.copy()
+        if not isinstance(macro_clean.index, pd.DatetimeIndex):
+            macro_clean.index = pd.to_datetime(macro_clean.index)
+        if macro_clean.index.tz is not None:
+            macro_clean.index = macro_clean.index.tz_localize(None)
+            
         df = pd.merge_asof(
             df.sort_index(), 
-            macro_df.sort_index(), 
+            macro_clean.sort_index(), 
             left_index=True, 
             right_index=True, 
             direction="backward"
@@ -140,11 +151,9 @@ def integrate_macro_features(df: pd.DataFrame, macro_df: pd.DataFrame) -> pd.Dat
         df["USD_NGN_Parallel"] = df["USD_NGN_Parallel"].ffill().bfill()
 
     # Calculate Macro Interaction Variables
-    # Real Inflation-Adjusted Log Return
     daily_inflation_rate = (df["Inflation_YoY_Pct"] / 100.0) / 252.0
     df["Real_Log_Return"] = df["Log_Return"] - daily_inflation_rate
 
-    # FX Sensitivity Coefficient (20-day rolling correlation with USD/NGN)
     df["FX_Log_Return"] = np.log(df["USD_NGN_Parallel"] / df["USD_NGN_Parallel"].shift(1)).fillna(0.0)
     df["FX_Sensitivity_20D"] = df["Log_Return"].rolling(20).corr(df["FX_Log_Return"]).fillna(0.0)
 
@@ -169,45 +178,20 @@ def build_feature_matrix(
     Returns:
         pd.DataFrame: Clean, stationarity-tested master feature matrix.
     """
-    # Step 1: Log Returns
     df = compute_log_returns(ohlcv_df)
     
-    # Verify Stationarity on raw returns
     stat_res = check_stationarity(df["Log_Return"])
     print(f"  🔍 Stationarity Test (ADF p-value: {stat_res['p_value']:.4f}) -> Stationary: {stat_res['is_stationary']}")
 
-    # Step 2: Technical & Volatility Features
     df = add_technical_momentum_features(df)
+    df = integrate_macro_features(df, macro_df if macro_df is not None else pd.DataFrame())
 
-    # Step 3: Macro Integration
-    if macro_df is not None:
-        df = integrate_macro_features(df, macro_df)
-    else:
-        df = integrate_macro_features(df, pd.DataFrame())
-
-    # Step 4: Lagged Predictive Features (t-1, t-5, t-20)
     features_to_lag = ["Log_Return", "Vol_20D", "RSI_14", "MACD_Hist", "Real_Log_Return", "FX_Sensitivity_20D"]
     for col in features_to_lag:
         if col in df.columns:
             for lag in lags:
                 df[f"{col}_lag_{lag}"] = df[col].shift(lag)
 
-    # Drop NaNs created by rolling windows and lagging
     df.dropna(inplace=True)
-
     return df
 
-
-if __name__ == "__main__":
-    # Local Test Execution using Phase 1 Data Ingestion
-    from src.data_ingestion import fetch_all_ngx_data
-
-    print("🚀 Testing Phase 2 Feature Engineering Pipeline...")
-    ohlcv_series, macro_df = fetch_all_ngx_data(symbols=["CADBURY.LG"], start_date="2022-01-01")
-    
-    cadbury_ohlcv = ohlcv_series["CADBURY.LG"]
-    feature_matrix = build_feature_matrix(cadbury_ohlcv, macro_df)
-    
-    print("\n✅ Phase 2 Master Feature Matrix Constructed Successfully!")
-    print(f"  • Shape: {feature_matrix.shape} (Rows x Feature Columns)")
-    print("  • Feature Sample Columns:", list(feature_matrix.columns[:10]))
