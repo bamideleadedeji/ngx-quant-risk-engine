@@ -19,7 +19,7 @@ Features:
 
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from scipy.optimize import minimize
 
 # =============================================================================
