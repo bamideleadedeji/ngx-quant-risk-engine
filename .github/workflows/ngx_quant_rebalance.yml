@@ -2,8 +2,8 @@ name: NGX Quant Engine — Automated Rebalance & Execution
 
 on:
   schedule:
-    # 10:30 AM WAT (UTC+1) = 09:30 AM UTC, Monday through Friday
-    - cron: '30 9 * * 1-5'
+    # 8:00 PM WAT (UTC+1) = 19:00 UTC, Monday through Friday (Post-Market Close Night-Queue Prep)
+    - cron: '0 19 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           path: bamboo_session.json
           key: bamboo-session-${{ runner.os }}
 
-      - name: 6. Execute Quantitative Pipeline & Headless Trade Bridge
+      - name: 6. Execute Quantitative Pipeline & Evening Night-Queue Prep
         env:
           PYTHONPATH: .
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -57,7 +57,7 @@ jobs:
           from src.risk_portfolio import optimize_ngx_portfolio
           from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
 
-          print('🚀 Running NGX Quantitative Automated Rebalancing...')
+          print('🚀 Running NGX Quantitative Post-Market Rebalancing & Night-Queue Prep...')
 
           ohlcv_dict, macro_df = di.fetch_all_ngx_data()
           signals = run_predictive_pipeline(ohlcv_dict)
@@ -78,7 +78,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add ngx_trade_audit.csv || true
           git add bamboo_session.json 2>/dev/null || true
-          git commit -m "auto: append timestamped trade execution audit log" || true
+          git commit -m "auto: append timestamped post-market trade execution audit log" || true
           git push || true
 
       - name: 8. Upload Debug Screenshots Always
