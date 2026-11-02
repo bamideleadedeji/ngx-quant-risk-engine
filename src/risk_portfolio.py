@@ -13,7 +13,7 @@ Features:
     - GJR-GARCH(1,1) asymmetric volatility modeling & parametric 1-Day VaR
     - Macro-Regime Overlays (CBN MPR & Inflation Guardrails) to tighten VaR and tilt sector scores
     - Strict Sector Exposure Caps (Max 25% per sector) to eliminate concentration risk
-    - SLSQP constrained mean-variance portfolio optimization
+    - SLSQP constrained mean-variance portfolio optimization with robust signal parsing
 ===============================================================================
 """
 
@@ -98,9 +98,9 @@ def calculate_macro_regime_overlay(macro_df: pd.DataFrame) -> Dict[str, Any]:
 
 
 def apply_macro_tilt_to_signals(
-    signals: Dict[str, Dict[str, Any]], 
+    signals: Dict[str, Any], 
     macro_df: pd.DataFrame
-) -> Dict[str, Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Adjusts quantitative signal scores dynamically based on the prevailing CBN macro regime.
     """
@@ -112,15 +112,18 @@ def apply_macro_tilt_to_signals(
         
     adjusted_signals = {}
     for sym, data in signals.items():
-        sector = data.get("sector", get_stock_sector(sym))
-        multiplier = tilts.get(sector, 1.0)
-        
-        adj_data = data.copy()
-        original_score = adj_data.get("signal_score", 1.0)
-        adj_data["signal_score"] = original_score * multiplier
-        
-        adjusted_signals[sym] = adj_data
-        
+        if isinstance(data, dict):
+            sector = data.get("sector", get_stock_sector(sym))
+            multiplier = tilts.get(sector, 1.0)
+            adj_data = data.copy()
+            original_score = adj_data.get("signal_score", adj_data.get("score", 1.0))
+            adj_data["signal_score"] = original_score * multiplier
+            adjusted_signals[sym] = adj_data
+        else:
+            sector = get_stock_sector(sym)
+            multiplier = tilts.get(sector, 1.0)
+            adjusted_signals[sym] = float(data) * multiplier
+            
     return adjusted_signals
 
 
@@ -168,9 +171,10 @@ def calculate_garch_volatility_and_var(
 # Constrained Portfolio Optimizer with Strict Sector Caps (Max 25%)
 # =============================================================================
 def optimize_ngx_portfolio(
-    signals: Dict[str, Dict[str, Any]], 
+    signals: Dict[str, Any], 
     portfolio_value_ngn: float,
-    max_sector_weight: float = 0.25
+    max_sector_weight: float = 0.25,
+    latest_prices: Optional[Dict[str, float]] = None
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Optimizes portfolio allocations across NGX equities maximizing signal scores 
@@ -178,12 +182,26 @@ def optimize_ngx_portfolio(
     1. Fully invested portfolio (Sum of weights = 1.0)
     2. Maximum individual stock allocation (0.0% to 20.0%)
     3. Strict Sector Exposure Caps (No single sector exceeds max_sector_weight, default 25%)
+    Handles both dictionary signal formats and flat float score formats.
     """
-    valid_signals = {
-        sym: data for sym, data in signals.items() 
-        if data.get("signal_score", 0.0) > 0.0 and data.get("latest_price", 0.0) > 0.0
-    }
-    
+    valid_signals = {}
+    for sym, data in signals.items():
+        if isinstance(data, dict):
+            score = data.get("signal_score", data.get("score", 0.0))
+            price = data.get("latest_price", data.get("price", 0.0))
+            sector = data.get("sector", get_stock_sector(sym))
+        else:
+            score = float(data)
+            price = latest_prices.get(sym, 30.0) if latest_prices else 30.0
+            sector = get_stock_sector(sym)
+            
+        if score > 0.0 and price > 0.0:
+            valid_signals[sym] = {
+                "signal_score": score,
+                "latest_price": price,
+                "sector": sector
+            }
+            
     if not valid_signals:
         print("⚠️ No positive buy signals generated. Retaining defensive cash or equal-weight baseline.")
         return {}, {}
@@ -191,11 +209,11 @@ def optimize_ngx_portfolio(
     symbols = list(valid_signals.keys())
     n = len(symbols)
     
-    scores = np.array([valid_signals[sym].get("signal_score", 1.0) for sym in symbols])
+    scores = np.array([valid_signals[sym]["signal_score"] for sym in symbols])
     scores = np.maximum(scores, 0.01)
     base_weights = scores / scores.sum()
     
-    sectors = [valid_signals[sym].get("sector", get_stock_sector(sym)) for sym in symbols]
+    sectors = [valid_signals[sym]["sector"] for sym in symbols]
     unique_sectors = list(set(sectors))
     
     def objective(w):
