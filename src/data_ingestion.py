@@ -4,9 +4,9 @@ NGX Quantitative Engine — Phase 1: Data Ingestion Pipeline
 File: src/data_ingestion.py
 ===============================================================================
 Description:
-    Ingests daily OHLCV price series for Nigerian Exchange (NGX) equities,
-    corporate fundamental metrics (P/E, EPS, Dividend Yield), and CBN macro
-    indicators (MPR, Inflation, USD/NGN exchange rate).
+    Ingests daily OHLCV price series for Nigerian Exchange (NGX) equities across
+    all major economic sectors, corporate fundamental metrics (P/E, EPS, Dividend Yield),
+    and CBN macro indicators (MPR, Inflation, USD/NGN exchange rate).
 
 Features:
     - Multi-suffix Yahoo Finance fallback (.LG, .NS, clean tickers)
@@ -24,32 +24,74 @@ import pandas as pd
 from typing import Dict, List, Optional, Union, Tuple, Any
 from datetime import datetime, timedelta
 
-# Standardized watchlist for major liquid NGX sectors
+# Comprehensive multi-sector watchlist covering all pillars of the NGX
 DEFAULT_NGX_WATCHLIST = [
-    "ZENITHBANK.LG", # Banking: Zenith Bank
-    "GTCO.LG",       # Banking: Guaranty Trust Holding Co.
-    "DANGCEM.LG",    # Industrials: Dangote Cement
-    "MTNN.LG",       # Telecoms: MTN Nigeria
-    "BUACEMENT.LG",  # Industrials: BUA Cement
-    "UBA.LG",        # Banking: United Bank for Africa
-    "ACCESSCORP.LG", # Banking: Access Holdings
-    "NB.LG",         # Consumer Goods: Nigerian Breweries
-    "NESTLE.LG",     # Consumer Goods: Nestle Nigeria
-    "CADBURY.LG"     # Consumer Goods: Cadbury Nigeria Plc
+    # Banking Sector
+    "ZENITHBANK.LG", "GTCO.LG", "UBA.LG", "ACCESSCORP.LG", "FBNH.LG", "STANBIC.LG", "FIDELITYBK.LG",
+    # Consumer Goods Sector
+    "NESTLE.LG", "NB.LG", "CADBURY.LG", "UNILEVER.LG", "FLOURMILL.LG", "DANGSUGAR.LG", "BUAFOODS.LG",
+    # Industrial Goods Sector
+    "DANGCEM.LG", "BUACEMENT.LG", "WAPCO.LG",
+    # Oil & Gas Sector
+    "SEPLAT.LG", "CONOIL.LG", "TOTAL.LG", "ARDOVA.LG", "ETERNA.LG", "MRS.LG",
+    # ICT & Telecoms Sector
+    "MTNN.LG", "AIRTELAFRI.LG", "CHAMS.LG",
+    # Agriculture Sector
+    "OKOMUOIL.LG", "PRESCO.LG", "LIVESTOCK.LG",
+    # Healthcare Sector
+    "FIDSON.LG", "MAYBAKER.LG", "NEIMETH.LG", "GSK.LG",
+    # Conglomerates Sector
+    "TRANSCORP.LG", "UACN.LG", "JAPAULGOLD.LG", "SCOA.LG",
+    # Insurance & Services Sector
+    "NEM.LG", "MANSARD.LG", "AIICO.LG", "CORNERSTONE.LG", "WAPIC.LG", "LASACO.LG", "UPDC.LG"
 ]
 
 # Benchmark market price anchors for synthetic market fallback generator
 NGX_PRICE_ANCHORS = {
-    "ZENITHBANK": 38.50,
-    "GTCO": 45.20,
-    "DANGCEM": 650.00,
-    "MTNN": 220.00,
-    "BUACEMENT": 110.00,
-    "UBA": 24.50,
-    "ACCESSCORP": 19.80,
-    "NB": 28.00,
-    "NESTLE": 850.00,
-    "CADBURY": 16.50
+    "ZENITHBANK": 61.63,
+    "GTCO": 47.71,
+    "UBA": 28.50,
+    "ACCESSCORP": 24.20,
+    "FBNH": 27.50,
+    "STANBIC": 65.00,
+    "FIDELITYBK": 14.20,
+    "NESTLE": 1150.00,
+    "NB": 32.00,
+    "CADBURY": 16.50,
+    "UNILEVER": 22.00,
+    "FLOURMILL": 48.00,
+    "DANGSUGAR": 55.00,
+    "BUAFOODS": 340.00,
+    "DANGCEM": 1159.57,
+    "BUACEMENT": 105.00,
+    "WAPCO": 38.00,
+    "SEPLAT": 4500.00,
+    "CONOIL": 130.00,
+    "TOTAL": 450.00,
+    "ARDOVA": 35.00,
+    "ETERNA": 21.00,
+    "MRS": 120.00,
+    "MTNN": 221.15,
+    "AIRTELAFRI": 2200.00,
+    "CHAMS": 2.10,
+    "OKOMUOIL": 380.00,
+    "PRESCO": 420.00,
+    "LIVESTOCK": 3.50,
+    "FIDSON": 18.00,
+    "MAYBAKER": 7.50,
+    "NEIMETH": 3.20,
+    "GSK": 15.00,
+    "TRANSCORP": 18.20,
+    "UACN": 25.00,
+    "JAPAULGOLD": 2.40,
+    "SCOA": 1.90,
+    "NEM": 11.00,
+    "MANSARD": 8.50,
+    "AIICO": 1.60,
+    "CORNERSTONE": 2.20,
+    "WAPIC": 1.40,
+    "LASACO": 2.80,
+    "UPDC": 2.10
 }
 
 
@@ -178,6 +220,7 @@ def fetch_ngx_corporate_fundamentals(symbol: str) -> Dict[str, Union[float, str]
     Extracts fundamental financial metrics for a targeted NGX listed equity.
     """
     clean_sym = symbol.split(".")[0]
+    base_price = NGX_PRICE_ANCHORS.get(clean_sym, 30.0)
     
     try:
         import yfinance as yf
@@ -187,29 +230,29 @@ def fetch_ngx_corporate_fundamentals(symbol: str) -> Dict[str, Union[float, str]
         return {
             "symbol": clean_sym,
             "company_name": info.get("longName", f"{clean_sym} Plc"),
-            "sector": info.get("sector", "Financial Services"),
+            "sector": info.get("sector", "Equities"),
             "market_cap_ngn": info.get("marketCap", 500_000_000_000.0),
             "trailing_pe": info.get("trailingPE", 4.2),
             "forward_pe": info.get("forwardPE", 3.8),
-            "eps": info.get("trailingEps", 8.5),
+            "eps": info.get("trailingEps", base_price / 5.0),
             "dividend_yield": info.get("dividendYield", 0.085),
             "price_to_book": info.get("priceToBook", 0.85),
-            "52_week_high": info.get("fiftyTwoWeekHigh", 42.0),
-            "52_week_low": info.get("fiftyTwoWeekLow", 30.0)
+            "52_week_high": info.get("fiftyTwoWeekHigh", base_price * 1.2),
+            "52_week_low": info.get("fiftyTwoWeekLow", base_price * 0.8)
         }
     except Exception:
         return {
             "symbol": clean_sym,
             "company_name": f"{clean_sym} Plc",
-            "sector": "Financial Services",
+            "sector": "Equities",
             "market_cap_ngn": 500_000_000_000.0,
             "trailing_pe": 4.2,
             "forward_pe": 3.8,
-            "eps": 8.5,
+            "eps": base_price / 5.0,
             "dividend_yield": 0.085,
             "price_to_book": 0.85,
-            "52_week_high": 42.0,
-            "52_week_low": 30.0
+            "52_week_high": base_price * 1.2,
+            "52_week_low": base_price * 0.8
         }
 
 
@@ -221,10 +264,10 @@ def fetch_cbn_macro_indicators() -> pd.DataFrame:
     Ingests key Nigerian macroeconomic drivers (MPR, Inflation, USD/NGN FX rate).
     """
     try:
-        dates = pd.date_range(end=datetime.now(), periods=24, freq="ME")
+        dates = pd.date_range(end=datetime.now(), periods=24, freq="MS")
         macro_df = pd.DataFrame({
             "Date": dates,
-            "CBN_MPR_Pct": np.full(len(dates), 26.75),   # CBN Monetary Policy Rate
+            "CBN_MPR_Pct": np.full(len(dates), 26.75),    # CBN Monetary Policy Rate
             "Inflation_YoY_Pct": np.full(len(dates), 32.15), # Headline YoY Inflation
             "USD_NGN_Parallel": np.full(len(dates), 1650.00) # FX Rate Benchmark
         })
@@ -248,13 +291,12 @@ def run_phase_1_pipeline(
     if symbols is None or len(symbols) == 0:
         symbols = DEFAULT_NGX_WATCHLIST
 
-    print(f"🚀 Initializing Phase 1 Pipeline: Ingesting {len(symbols)} NGX Equities...")
+    print(f"🚀 Initializing Phase 1 Pipeline: Ingesting {len(symbols)} NGX Equities across all sectors...")
     
     ohlcv_data = {}
     fundamentals_list = []
 
     for sym in symbols:
-        print(f"  📥 Fetching Market Data: {sym}...")
         df = fetch_ngx_ohlcv_yfinance(sym, start_date=start_date)
         if not df.empty:
             ohlcv_data[sym] = df
@@ -265,7 +307,7 @@ def run_phase_1_pipeline(
     macro_df = fetch_cbn_macro_indicators()
     fundamentals_df = pd.DataFrame(fundamentals_list)
 
-    print("✅ Phase 1 Data Ingestion Pipeline Complete!")
+    print("✅ Phase 1 Cross-Sector Data Ingestion Pipeline Complete!")
     return {
         "ohlcv_series": ohlcv_data,
         "fundamentals": fundamentals_df,
@@ -291,7 +333,7 @@ fetch_ngx_data = fetch_all_ngx_data
 
 if __name__ == "__main__":
     # Test execution locally
-    ohlcv_dict, macro_df = fetch_all_ngx_data(symbols=["ZENITHBANK.LG", "GTCO.LG"])
+    ohlcv_dict, macro_df = fetch_all_ngx_data(symbols=["ZENITHBANK.LG", "OKOMUOIL.LG", "NEM.LG"])
     print("\n--- OHLCV Keys Loaded ---")
     print(list(ohlcv_dict.keys()))
     print("\n--- Macro Indicators ---")
