@@ -6,12 +6,13 @@ File: src/data_ingestion.py
 Description:
     Ingests daily OHLCV price series for Nigerian Exchange (NGX) equities across
     all major economic sectors, corporate fundamental metrics (P/E, EPS, Dividend Yield),
-    and CBN macro indicators (MPR, Inflation, USD/NGN exchange rate).
+    CBN macro indicators (MPR, Inflation, USD/NGN exchange rate), and enforces 
+    an institutional Liquidity Volume Gate (ADTV filter).
 
 Features:
     - Multi-suffix Yahoo Finance fallback (.LG, .NS, clean tickers)
     - High-fidelity synthetic OHLCV market generator fallback for pipeline resilience
-    - NGX REST API / JSON wrapper integration
+    - Institutional Liquidity Gate (Minimum ₦5M Average Daily Traded Value)
     - Central Bank of Nigeria (CBN) macroeconomic time-series ingestion
     - Automated caching layer to optimize API throughput
 ===============================================================================
@@ -134,7 +135,7 @@ def _generate_synthetic_ngx_ohlcv(symbol: str, days: int = 750) -> pd.DataFrame:
 
 
 # =============================================================================
-# 1.1 Market Price Data Ingestion (OHLCV)
+# 1.1 Market Price Data Ingestion (OHLCV) & Liquidity Gate
 # =============================================================================
 def fetch_ngx_ohlcv_yfinance(
     symbol: str, 
@@ -192,6 +193,38 @@ def fetch_ngx_ohlcv_yfinance(
     # Fallback to realistic synthetic series if external feeds return empty
     print(f"⚠️ Live feed empty for {symbol}. Engaging high-fidelity market fallback series.")
     return _generate_synthetic_ngx_ohlcv(clean_symbol)
+
+
+def filter_ngx_liquidity(
+    ohlcv_data: Dict[str, pd.DataFrame], 
+    min_adtv_ngn: float = 5_000_000.0
+) -> Dict[str, pd.DataFrame]:
+    """
+    Institutional Liquidity Gate ("Ghost Stock" Filter):
+    Filters out stocks where average daily traded value (Close * Volume) 
+    over the last 30 trading sessions falls below min_adtv_ngn (default ₦5,000,000).
+    """
+    filtered_data = {}
+    dropped_count = 0
+
+    for sym, df in ohlcv_data.items():
+        if df.empty or len(df) < 30:
+            print(f"⚠️ Dropped {sym}: Insufficient historical session length.")
+            dropped_count += 1
+            continue
+
+        recent_df = df.tail(30)
+        daily_traded_value = recent_df["Close"] * recent_df["Volume"]
+        adtv = daily_traded_value.mean()
+
+        if adtv >= min_adtv_ngn:
+            filtered_data[sym] = df
+        else:
+            print(f"👻 Ghost Stock Filter Dropped {sym}: ADTV of ₦{adtv:,.2f} is below ₦{min_adtv_ngn:,.2f} threshold.")
+            dropped_count += 1
+
+    print(f"🔒 Liquidity Gate Complete: Retained {len(filtered_data)} liquid equities | Filtered out {dropped_count} illiquid assets.")
+    return filtered_data
 
 
 def fetch_ngx_api_snapshot(api_key: Optional[str] = None) -> pd.DataFrame:
@@ -286,7 +319,8 @@ def run_phase_1_pipeline(
     start_date: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Executes Phase 1 data ingestion across all target NGX equities and macro drivers.
+    Executes Phase 1 data ingestion across all target NGX equities and macro drivers,
+    incorporating the institutional liquidity volume gate.
     """
     if symbols is None or len(symbols) == 0:
         symbols = DEFAULT_NGX_WATCHLIST
@@ -303,6 +337,9 @@ def run_phase_1_pipeline(
         
         fund = fetch_ngx_corporate_fundamentals(sym)
         fundamentals_list.append(fund)
+
+    # Enforce Liquidity Volume Gate (Minimum ₦5M Average Daily Traded Value)
+    ohlcv_data = filter_ngx_liquidity(ohlcv_data, min_adtv_ngn=5_000_000.0)
 
     macro_df = fetch_cbn_macro_indicators()
     fundamentals_df = pd.DataFrame(fundamentals_list)
