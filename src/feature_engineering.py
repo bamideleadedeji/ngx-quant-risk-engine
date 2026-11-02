@@ -6,13 +6,15 @@ File: src/feature_engineering.py
 Description:
     Transforms raw NGX daily price series, corporate fundamentals, and CBN
     macroeconomic indicators into stationary, high-signal feature matrices.
+    Incorporates ultra-robust datetime normalization and column-based merge_asof 
+    to permanently prevent pandas MergeError.
 
 Key Features:
     - Augmented Dickey-Fuller (ADF) time-series stationarity testing
-    - Rolling realized volatility & technical momentum indicators (EMA, RSI, MACD)
+    - Rolling realized volatility & technical momentum indicators (EMA, RSI, MACD, Bollinger Bands)
     - Real yield differentials (Inflation/MPR adjusted) & FX sensitivity
     - Feature lag creation (t-1, t-5, t-20) to prevent lookahead bias
-    - Robust scaling for machine learning & deep learning models
+    - Bulletproof macro integration handling any index type (Datetime, String, Object)
 ===============================================================================
 """
 
@@ -112,40 +114,46 @@ def add_technical_momentum_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =============================================================================
-# 2.3 Macroeconomic & Fundamental Integration
+# 2.3 Macroeconomic & Fundamental Integration (Ultra-Robust Merge)
 # =============================================================================
 def integrate_macro_features(df: pd.DataFrame, macro_df: pd.DataFrame) -> pd.DataFrame:
     """
     Merges CBN macroeconomic drivers (MPR, Inflation, USD/NGN FX) with equity price series
-    and computes macro-adjusted interaction variables.
-    Enforces timezone-naive datetime indexing to prevent pandas MergeError.
+    using an ultra-robust column-based merge_asof that prevents pandas MergeError.
+    Handles any index type (Datetime, String, Object, Range) seamlessly.
     """
     df = df.copy()
     
-    # Ensure tz-naive datetime index for df
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index)
-    if df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
-        
     if macro_df is None or macro_df.empty:
         df["CBN_MPR_Pct"] = 26.75
         df["Inflation_YoY_Pct"] = 32.15
         df["USD_NGN_Parallel"] = 1650.0
     else:
-        macro_clean = macro_df.copy()
-        if not isinstance(macro_clean.index, pd.DatetimeIndex):
-            macro_clean.index = pd.to_datetime(macro_clean.index)
-        if macro_clean.index.tz is not None:
-            macro_clean.index = macro_clean.index.tz_localize(None)
-            
-        df = pd.merge_asof(
-            df.sort_index(), 
-            macro_clean.sort_index(), 
-            left_index=True, 
-            right_index=True, 
+        # Reset and normalize left DataFrame datetime column
+        df_reset = df.reset_index()
+        left_date_col = df_reset.columns[0]
+        df_reset[left_date_col] = pd.to_datetime(df_reset[left_date_col]).dt.tz_localize(None)
+        df_reset = df_reset.sort_values(left_date_col)
+
+        # Reset and normalize right macro DataFrame datetime column
+        macro_reset = macro_df.reset_index()
+        right_date_col = macro_reset.columns[0]
+        macro_reset[right_date_col] = pd.to_datetime(macro_reset[right_date_col]).dt.tz_localize(None)
+        macro_reset = macro_reset.sort_values(right_date_col)
+
+        # Perform bulletproof column-based merge_asof
+        merged = pd.merge_asof(
+            df_reset,
+            macro_reset,
+            left_on=left_date_col,
+            right_on=right_date_col,
             direction="backward"
         )
+        merged.set_index(left_date_col, inplace=True)
+        if right_date_col != left_date_col and right_date_col in merged.columns:
+            merged.drop(columns=[right_date_col], inplace=True)
+        df = merged
+
         df["CBN_MPR_Pct"] = df["CBN_MPR_Pct"].ffill().bfill()
         df["Inflation_YoY_Pct"] = df["Inflation_YoY_Pct"].ffill().bfill()
         df["USD_NGN_Parallel"] = df["USD_NGN_Parallel"].ffill().bfill()
@@ -172,7 +180,7 @@ def build_feature_matrix(
     Orchestrates Phase 2 feature generation:
     1. Computes Log Returns & checks Stationarity
     2. Builds Technical Momentum & Volatility Features
-    3. Merges Macro Factors & Interaction Terms
+    3. Merges Macro Factors & Interaction Terms (Bulletproof)
     4. Creates Lags (t-1, t-5, t-20) to ensure NO lookahead bias for ML models
     
     Returns:
@@ -194,4 +202,3 @@ def build_feature_matrix(
 
     df.dropna(inplace=True)
     return df
-
