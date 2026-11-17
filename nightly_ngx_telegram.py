@@ -66,7 +66,7 @@ def send_telegram(text: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram credentials not found in environment; skipping Telegram push.")
         return
-    url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = "https://telegram.org" + TELEGRAM_BOT_TOKEN + "/sendMessage"
     try:
         resp = requests.post(
             url,
@@ -141,7 +141,7 @@ def run_nightly_rebalance_alert():
                 })
 
     lines = [
-        f"📈 *NGX MIDNIGHT BAMBOO ORDER TICKET*",
+        "📈 *NGX MIDNIGHT BAMBOO ORDER TICKET*",
         f"🕒 `{wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}`",
         f"💰 Portfolio Value: *₦{total_portfolio:,.2f}* ({total_pnl:+,.2f})",
         f"💵 Projected Internal Cash Pool: *₦{projected_cash:,.2f}*",
