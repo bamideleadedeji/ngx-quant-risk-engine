@@ -42,38 +42,23 @@ def load_state() -> tuple[pd.DataFrame, float]:
     return pd.DataFrame(DEFAULT_HOLDINGS), 0.0
 
 
-def sync_prices(df: pd.DataFrame) -> pd.DataFrame:
-    try:
-        import yfinance as yf
-        for idx, row in df.iterrows():
-            clean = str(row["Ticker"]).strip().upper()
-            for suffix in (".LG", ".NS", ""):
-                try:
-                    hist = yf.Ticker(f"{clean}{suffix}").history(period="5d")
-                    if not hist.empty:
-                        val = float(hist["Close"].iloc[-1])
-                        if val > 0:
-                            df.at[idx, "Live_Price"] = round(val, 2)
-                            break
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return df
-
-
 def send_telegram(text: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram credentials not found in environment; skipping Telegram push.")
         return
-    url = "https://telegram.org" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+    clean_token = TELEGRAM_BOT_TOKEN.lstrip("/")
+    if not clean_token.startswith("bot"):
+        clean_token = "bot" + clean_token
+    url = "https://telegram.org" + clean_token + "/sendMessage"
     try:
         resp = requests.post(
             url,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"},
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
             timeout=15,
         )
         print(f"Telegram dispatch status: HTTP {resp.status_code}")
+        if resp.status_code != 200:
+            print(f"Telegram response: {resp.text}")
     except Exception as exc:
         print(f"Telegram dispatch error: {exc}")
 
@@ -81,7 +66,6 @@ def send_telegram(text: str):
 def run_nightly_rebalance_alert():
     wat_now = datetime.now(timezone.utc) + timedelta(hours=1)
     df, free_cash = load_state()
-    df = sync_prices(df)
 
     df["Cost_Value"] = df["Units"] * df["Avg_Cost"]
     df["Market_Value"] = df["Units"] * df["Live_Price"]
@@ -141,20 +125,20 @@ def run_nightly_rebalance_alert():
                 })
 
     lines = [
-        "📈 *NGX MIDNIGHT BAMBOO ORDER TICKET*",
-        f"🕒 `{wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}`",
-        f"💰 Portfolio Value: *₦{total_portfolio:,.2f}* ({total_pnl:+,.2f})",
-        f"💵 Projected Internal Cash Pool: *₦{projected_cash:,.2f}*",
+        "📈 NGX MIDNIGHT BAMBOO ORDER TICKET",
+        f"🕒 {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
+        f"💰 Portfolio Value: ₦{total_portfolio:,.2f} ({total_pnl:+,.2f})",
+        f"💵 Projected Internal Cash Pool: ₦{projected_cash:,.2f}",
         "",
     ]
 
     all_tickets = sell_tickets + buy_tickets
     if all_tickets:
-        lines.append("*Place these Limit Orders on Bamboo at 12:00 AM WAT:*")
+        lines.append("Place these Limit Orders on Bamboo at 12:00 AM WAT:")
         for t in sell_tickets:
-            lines.append(f"🔴 *SELL {t['Units']} {t['Ticker']}* @ *₦{t['Limit_NGN']:,.2f}* (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(f"🔴 SELL {t['Units']} {t['Ticker']} @ ₦{t['Limit_NGN']:,.2f} (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
         for t in buy_tickets:
-            lines.append(f"🟢 *BUY {t['Units']} {t['Ticker']}* @ *₦{t['Limit_NGN']:,.2f}* (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(f"🟢 BUY {t['Units']} {t['Ticker']} @ ₦{t['Limit_NGN']:,.2f} (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         pd.DataFrame([
@@ -171,7 +155,7 @@ def run_nightly_rebalance_alert():
             for t in all_tickets
         ]).to_csv(AUDIT_FILE, mode="a", header=not os.path.exists(AUDIT_FILE), index=False)
     else:
-        lines.append("✅ *Portfolio Balanced:* All 8 NGX equities are within ±3.0% drift. No orders needed tonight.")
+        lines.append("✅ Portfolio Balanced: All 8 NGX equities are within ±3.0% drift. No orders needed tonight.")
 
     msg = "\n".join(lines)
     print(msg)
