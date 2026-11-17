@@ -1,45 +1,17 @@
 """
-===============================================================================
-NGX Quantitative Engine — Phase 6: Streamlit Web Dashboard & Control Center
-File: app.py
-===============================================================================
-Description:
-    Autonomous institutional executive intelligence dashboard for monitoring NGX equity 
-    forecasting, GARCH volatility metrics, 1-Day 95% VaR risk caps, and live 
-    automated broker rebalance executions. Micro-capital friendly.
-===============================================================================
+NGX Quantitative Engine - Self-Funding Cashless Rebalancer & Midnight Bamboo Order-Ticket Generator
+Tracks live CSCS/Bamboo holdings, trims overweight gainers to fund underweight blue-chips without external cash,
+and computes +1.25% pre-market limit prices for 12:00 AM WAT execution.
 """
 
-from datetime import datetime
-import json
 import os
-import numpy as np
+import json
+import math
+from datetime import datetime
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
-# Import Custom Engineering Modules (Phases 1 - 5)
-from src.data_ingestion import DEFAULT_NGX_WATCHLIST, run_phase_1_pipeline
-from src.execution_engine import calculate_ngx_order_lots, dispatch_rebalance_orders
-from src.feature_engineering import build_feature_matrix
-from src.models.deep_forecaster import (
-    generate_directional_signal_score,
-    train_lstm_forecaster,
-    train_transformer_forecaster,
-)
-from src.models.econometric_volatility import (
-    fit_gjr_garch,
-    forecast_volatility_horizon,
-)
-from src.risk_engine import (
-    apply_ngx_liquidity_and_friction_filter,
-    optimize_ngx_portfolio_weights,
-)
-
-# =============================================================================
-# Streamlit App Configuration & Styling
-# =============================================================================
 st.set_page_config(
     page_title="NGX Quant Risk Engine",
     page_icon="📈",
@@ -47,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom Styling for Financial Terminal Aesthetic
 st.markdown(
     """
     <style>
@@ -55,342 +26,314 @@ st.markdown(
     .stMetric { background-color: #1e222d; padding: 15px; border-radius: 8px; border: 1px solid #2a2e39; }
     .stButton>button { width: 100%; background-color: #00c853; color: white; font-weight: bold; border-radius: 6px; }
     </style>
-""",
+    """,
     unsafe_allow_html=True,
 )
 
+STATE_FILE = "ngx_portfolio_state.json"
+AUDIT_FILE = "ngx_trade_audit.csv"
 
-# =============================================================================
-# Sidebar: Terminal Controls & Parameters
-# =============================================================================
-st.sidebar.title("🕹️ NGX Control Panel")
+DEFAULT_HOLDINGS = [
+    {"Ticker": "BUAFOODS", "Company": "BUA Foods Plc", "Units": 50.0, "Avg_Cost": 700.00, "Live_Price": 760.60, "Target_Weight_Pct": 16.0},
+    {"Ticker": "SEPLAT", "Company": "Seplat Energy Plc", "Units": 2.0, "Avg_Cost": 16000.10, "Live_Price": 16241.90, "Target_Weight_Pct": 16.0},
+    {"Ticker": "GTCO", "Company": "Guaranty Trust Holding Co.", "Units": 200.0, "Avg_Cost": 120.90, "Live_Price": 117.00, "Target_Weight_Pct": 16.0},
+    {"Ticker": "MTNN", "Company": "MTN Nigeria Comm. Plc", "Units": 15.0, "Avg_Cost": 825.00, "Live_Price": 837.00, "Target_Weight_Pct": 12.0},
+    {"Ticker": "ZENITHBANK", "Company": "Zenith Bank Plc", "Units": 100.0, "Avg_Cost": 116.60, "Live_Price": 116.00, "Target_Weight_Pct": 12.0},
+    {"Ticker": "OKOMUOIL", "Company": "Okomu Oil Palm Plc", "Units": 10.0, "Avg_Cost": 1148.60, "Live_Price": 1137.09, "Target_Weight_Pct": 10.0},
+    {"Ticker": "UNILEVER", "Company": "Unilever Nigeria Plc", "Units": 90.0, "Avg_Cost": 111.92, "Live_Price": 112.20, "Target_Weight_Pct": 10.0},
+    {"Ticker": "TRANSCOHOT", "Company": "Transcorp Hotels Plc", "Units": 20.0, "Avg_Cost": 275.30, "Live_Price": 290.50, "Target_Weight_Pct": 8.0},
+]
+
+
+def load_portfolio_state() -> tuple[pd.DataFrame, float]:
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                df = pd.DataFrame(data.get("holdings", DEFAULT_HOLDINGS))
+                cash = float(data.get("free_cash_ngn", 0.0))
+                if not df.empty:
+                    return df, cash
+        except Exception:
+            pass
+    return pd.DataFrame(DEFAULT_HOLDINGS), 0.0
+
+
+def save_portfolio_state(df: pd.DataFrame, free_cash_ngn: float):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "updated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "free_cash_ngn": float(free_cash_ngn),
+                "holdings": df.to_dict(orient="records"),
+            }, f, indent=2)
+    except Exception:
+        pass
+
+
+def fetch_latest_ngx_prices(tickers: list[str]) -> dict[str, float]:
+    prices = {}
+    try:
+        import yfinance as yf
+        for t in tickers:
+            clean = t.strip().upper()
+            for suffix in (".LG", ".NS", ""):
+                try:
+                    hist = yf.Ticker(f"{clean}{suffix}").history(period="5d")
+                    if not hist.empty:
+                        val = float(hist["Close"].iloc[-1])
+                        if val > 0:
+                            prices[clean] = round(val, 2)
+                            break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return prices
+
+
+st.sidebar.title("🕹️ NGX Execution Controls")
 st.sidebar.markdown("---")
+st.sidebar.info("🚀 **Mode:** Self-Funding Cashless Rebalancer + 12:00 AM WAT Bamboo Order Ticket")
 
-# Autonomous Live Execution Mode (Hardcoded Live Broker API - Simulation Removed)
-execution_mode = "Live Broker API"
-st.sidebar.info("🚀 **Execution Mode:** Autonomous Live Broker API Active")
-
-st.sidebar.markdown("### 💰 Capital & Risk Controls")
-portfolio_capital_ngn = st.sidebar.number_input(
-    "Total Portfolio Capital (₦)",
-    min_value=1000.0,
-    max_value=1000000000.0,
-    value=14855.00,  # Default matches funded Bamboo wallet balance
+free_cash_ngn = st.sidebar.number_input(
+    "Cleared Bamboo NGN Cash / New Deposit (₦)",
+    min_value=0.0,
+    max_value=500000000.0,
+    value=0.0,
     step=500.0,
     format="%.2f",
+    help="Set to ₦0.00 for 100% self-funding internal rebalancing, or enter any new deposit you added."
 )
 
-min_broker_order_floor = st.sidebar.number_input(
-    "Minimum Broker Order Floor (₦)",
+drift_threshold_pct = st.sidebar.slider(
+    "Rebalance Drift Trigger Band (%)",
+    min_value=1.5,
+    max_value=10.0,
+    value=3.0,
+    step=0.5,
+)
+
+buy_buffer_pct = st.sidebar.slider(
+    "12:00 AM Pre-Market Buy Limit Buffer (%)",
+    min_value=0.50,
+    max_value=3.00,
+    value=1.25,
+    step=0.25,
+    help="Adds +1.25% (e.g., ₦24.00 -> ₦24.30) to clear NGX/SEC/CSCS fees (~1.5%) & 10:00 AM opening auction."
+)
+
+sell_buffer_pct = st.sidebar.slider(
+    "12:00 AM Pre-Market Sell Limit Buffer (%)",
+    min_value=0.00,
+    max_value=2.50,
+    value=1.00,
+    step=0.25,
+    help="Subtracts 1.00% from close price so overweight trim orders fill reliably at market open."
+)
+
+min_order_floor = st.sidebar.number_input(
+    "Minimum Bamboo Order Value (₦)",
     min_value=500.0,
-    max_value=10000.0,
-    value=1000.00,  # Prevents sub-minimum order rejections/refunds
-    step=100.0,
-    format="%.2f",
+    max_value=25000.0,
+    value=1500.0,
+    step=250.0,
 )
 
-var_confidence = st.sidebar.select_slider(
-    "VaR Confidence Level (%)", options=[90.0, 95.0, 99.0], value=95.0
-)
-
-max_single_stock_cap = (
-    st.sidebar.slider(
-        "Max Single Stock Cap (%)",
-        min_value=10.0,
-        max_value=100.0,
-        value=100.0,
-        step=10.0,
-    )
-    / 100.0
-)
-
-sec_fee_hurdle = (
-    st.sidebar.slider(
-        "Min Required 30D Return (SEC Hurdle %)",
-        min_value=1.0,
-        max_value=10.0,
-        value=3.0,
-        step=0.5,
-    )
-    / 100.0
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔬 Model Parameters")
-selected_symbols = st.sidebar.multiselect(
-    "Select Target NGX Equities",
-    options=DEFAULT_NGX_WATCHLIST,
-    default=["ZENITHBANK.LG", "GTCO.LG", "DANGCEM.LG", "MTNN.LG"],
-)
-
-epochs_count = st.sidebar.slider(
-    "Deep Learning Training Epochs", min_value=5, max_value=50, value=10
-)
-
-
-# =============================================================================
-# Dashboard Main Header & Top-Level Navigation Tabs
-# =============================================================================
-st.title("📈 NGX Quantitative Stock Forecasting & Risk Engine")
-st.caption(
-    "Autonomous Institutional GARCH Volatility, PyTorch Deep Learning, and 1-Day 95%"
-    " VaR Live Execution Suite for the Nigerian Exchange"
-)
-
+st.title("📈 NGX Self-Funding Portfolio & Midnight Bamboo Order Engine")
+st.caption("CSCS-Verified Nigerian Exchange Rebalancer | Internal Winner-Trimming & +1.25% Pre-Market Limit Execution")
 st.markdown("---")
 
-# Navigation Tabs (Integrates Live Executions & Receipts prominently)
-tab_dashboard, tab_executions, tab_audit = st.tabs([
-    "📈 Quantitative Dashboard & Risk Control",
-    "⚡ Live Executions & Receipts",
-    "📋 Raw Audit Logs",
+tab_rebalance, tab_ledger = st.tabs([
+    "⚖️ Self-Funding Rebalancer & 12:00 AM Order Ticket",
+    "📋 Execution Audit Ledger (ngx_trade_audit.csv)",
 ])
 
-# =============================================================================
-# TAB 2: Live Executions & Receipts View
-# =============================================================================
-with tab_executions:
-    st.subheader("⚡ Live Automated Executions & Receipts Dashboard")
-    st.caption(
-        "Real-time tracking of autonomous trades executed via Bamboo & GitHub"
-        " Actions."
+with tab_rebalance:
+    df_saved, saved_cash = load_portfolio_state()
+    effective_cash = free_cash_ngn if free_cash_ngn > 0 else saved_cash
+
+    col_btn1, col_btn2 = st.columns([1, 2])
+    with col_btn1:
+        if st.button("🔄 Sync Latest Yahoo NGX Prices"):
+            live_map = fetch_latest_ngx_prices(df_saved["Ticker"].tolist())
+            if live_map:
+                df_saved["Live_Price"] = df_saved.apply(
+                    lambda r: live_map.get(r["Ticker"].upper(), r["Live_Price"]), axis=1
+                )
+                save_portfolio_state(df_saved, effective_cash)
+                st.success(f"Synced {len(live_map)} NGX prices from market feed.")
+            else:
+                st.warning("Yahoo NGX feed returned delayed/empty quotes; edit Live_Price directly in the table below from your Bamboo app.")
+
+    st.subheader("1. Live Bamboo / CSCS Holdings (Edit Units or Prices Anytime)")
+    edited_df = st.data_editor(
+        df_saved,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config={
+            "Units": st.column_config.NumberColumn("Units Held", min_value=0.0, format="%.2f"),
+            "Avg_Cost": st.column_config.NumberColumn("Avg Cost (₦)", min_value=0.0, format="%.2f"),
+            "Live_Price": st.column_config.NumberColumn("Current Price (₦)", min_value=0.01, format="%.2f"),
+            "Target_Weight_Pct": st.column_config.NumberColumn("Target Weight (%)", min_value=0.0, max_value=100.0, format="%.1f"),
+        },
+        key="ngx_holdings_editor",
     )
 
-    audit_filename = "ngx_trade_audit.csv"
-    if os.path.exists(audit_filename):
-        df_audit_exec = pd.read_csv(audit_filename)
+    if st.button("💾 Save Updated Holdings & Cash"):
+        save_portfolio_state(edited_df, effective_cash)
+        st.success("Saved updated holdings and cash balance.")
 
-        # Summary Metrics for Executions
-        total_trades = len(df_audit_exec)
-        filled_trades = len(
-            df_audit_exec[
-                df_audit_exec["Status"].astype(str).str.contains("FILLED")
-            ]
-        )
+    calc_df = edited_df.copy()
+    calc_df["Cost_Value"] = calc_df["Units"] * calc_df["Avg_Cost"]
+    calc_df["Market_Value"] = calc_df["Units"] * calc_df["Live_Price"]
+    calc_df["Unrealized_PnL"] = calc_df["Market_Value"] - calc_df["Cost_Value"]
+    calc_df["Return_Pct"] = ((calc_df["Live_Price"] - calc_df["Avg_Cost"]) / calc_df["Avg_Cost"].replace(0, 1)) * 100.0
 
-        em1, em2 = st.columns(2)
-        em1.metric("Total Execution Attempts", total_trades)
-        em2.metric("Successful Fills (FILLED_AUTOTRADE)", filled_trades)
+    equity_total = float(calc_df["Market_Value"].sum())
+    cost_total = float(calc_df["Cost_Value"].sum())
+    total_portfolio = equity_total + effective_cash
+    total_pnl = equity_total - cost_total
 
-        st.markdown("#### 📜 Official Execution Ledger")
-        st.dataframe(
-            df_audit_exec.sort_index(ascending=False), use_container_width=True
-        )
-    else:
-        st.info(
-            "No execution receipts recorded yet. Run an autonomous rebalance cycle to populate"
-            " the ledger."
-        )
+    weight_sum = float(calc_df["Target_Weight_Pct"].sum())
+    calc_df["Norm_Target_Pct"] = (calc_df["Target_Weight_Pct"] / weight_sum * 100.0) if weight_sum > 0 else 0.0
+    calc_df["Actual_Weight_Pct"] = (calc_df["Market_Value"] / total_portfolio * 100.0) if total_portfolio > 0 else 0.0
+    calc_df["Drift_Pct"] = calc_df["Actual_Weight_Pct"] - calc_df["Norm_Target_Pct"]
+    calc_df["Target_Value_NGN"] = total_portfolio * (calc_df["Norm_Target_Pct"] / 100.0)
+    calc_df["Dollar_Drift_NGN"] = calc_df["Market_Value"] - calc_df["Target_Value_NGN"]
 
-# =============================================================================
-# TAB 3: Raw Audit Logs View
-# =============================================================================
-with tab_audit:
-    st.subheader("📋 Raw Audit Logs (`ngx_trade_audit.csv`)")
-    if os.path.exists(audit_filename):
-        df_raw = pd.read_csv(audit_filename)
-        st.dataframe(df_raw, use_container_width=True)
-    else:
-        st.info("No raw audit logs found.")
-
-# =============================================================================
-# TAB 1: Quantitative Dashboard & Risk Control
-# =============================================================================
-with tab_dashboard:
-    # Section 1: Executive KPI Summary Cards
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric("Portfolio Capital", f"₦{portfolio_capital_ngn:,.2f}")
-    col2.metric(
-        "Execution Mode",
-        execution_mode,
-        delta="Autonomous Live",
-    )
-    col3.metric("Selected Universe", f"{len(selected_symbols)} Stocks")
-    col4.metric("Fee Hurdle Limit", f"{sec_fee_hurdle * 100:.1f}%")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total NGX Portfolio", f"₦{total_portfolio:,.2f}", delta=f"₦{total_pnl:+,.2f} Unrealized")
+    m2.metric("Equities Market Value", f"₦{equity_total:,.2f}")
+    m3.metric("Cleared / External NGN Cash", f"₦{effective_cash:,.2f}")
+    m4.metric("Rebalance Drift Band", f"±{drift_threshold_pct:.1f}%")
 
     st.markdown("---")
+    st.subheader("2. Portfolio Weight Drift & Valuation Audit")
 
-    # Main Action: Run Autonomous Quantitative Pipeline Button
-    if st.button("🚀 Execute Autonomous Pipeline & Live Rebalance"):
-        with st.spinner("Executing Autonomous Live Pipeline..."):
+    c_left, c_right = st.columns([3, 2])
+    with c_left:
+        display_cols = calc_df[[
+            "Ticker", "Units", "Live_Price", "Market_Value", "Return_Pct", "Actual_Weight_Pct", "Norm_Target_Pct", "Drift_Pct"
+        ]].copy()
+        display_cols.columns = [
+            "Ticker", "Units", "Price (₦)", "Value (₦)", "Gain/Loss (%)", "Actual (%)", "Target (%)", "Drift (%)"
+        ]
+        st.dataframe(
+            display_cols.style.format({
+                "Units": "{:.2f}",
+                "Price (₦)": "₦{:,.2f}",
+                "Value (₦)": "₦{:,.2f}",
+                "Gain/Loss (%)": "{:+.2f}%",
+                "Actual (%)": "{:.2f}%",
+                "Target (%)": "{:.2f}%",
+                "Drift (%)": "{:+.2f}%",
+            }),
+            use_container_width=True,
+        )
+    with c_right:
+        fig_alloc = px.pie(
+            calc_df,
+            names="Ticker",
+            values="Market_Value",
+            title="Current NGX Allocation",
+            hole=0.42,
+        )
+        st.plotly_chart(fig_alloc, use_container_width=True)
 
-            # Step 1: Data Ingestion
-            st.subheader("1. Ingesting NGX Equities & CBN Macro Data")
-            raw_data = run_phase_1_pipeline(symbols=selected_symbols)
-            ohlcv_dict = raw_data["ohlcv_series"]
-            macro_df = raw_data["macro_indicators"]
+    st.markdown("---")
+    st.subheader("3. Tonight's 12:00 AM WAT Bamboo Pre-Market Order Ticket (Self-Funding)")
 
-            st.success(
-                f"Ingested {len(ohlcv_dict)} OHLCV series & CBN Macro Drivers"
-                " successfully."
-            )
+    fee_rate = 0.0155
+    sell_tickets = []
+    projected_cash = effective_cash
 
-            # Step 2 & 3: Feature Engineering, GARCH Volatility & Deep Learning Signals
-            st.subheader("2. Predictive Model Signals & Volatility Forecasts")
+    overweight = calc_df[calc_df["Drift_Pct"] >= drift_threshold_pct].sort_values(by="Drift_Pct", ascending=False)
+    for _, row in overweight.iterrows():
+        excess_ngn = float(row["Dollar_Drift_NGN"])
+        close_px = float(row["Live_Price"])
+        limit_sell_px = round(close_px * (1.0 - sell_buffer_pct / 100.0), 2)
+        shares_to_sell = min(int(math.floor(excess_ngn / close_px)), int(math.floor(float(row["Units"]))))
+        gross_val = shares_to_sell * limit_sell_px
+        if shares_to_sell >= 1 and gross_val >= min_order_floor:
+            net_proceeds = gross_val * (1.0 - fee_rate)
+            projected_cash += net_proceeds
+            sell_tickets.append({
+                "Phase": "1 - TRIM WINNER",
+                "Ticker": row["Ticker"],
+                "Action": "SELL",
+                "Units": shares_to_sell,
+                "Ref_Close_NGN": close_px,
+                "Midnight_Limit_NGN": limit_sell_px,
+                "Est_Order_Value_NGN": round(gross_val, 2),
+                "Rationale": f"Overweight by {row['Drift_Pct']:+.2f}% (Gain: {row['Return_Pct']:+.2f}%)"
+            })
 
-            signals_map = {}
-            market_data_for_risk = {}
-            latest_prices = {}
+    buy_tickets = []
+    underweight = calc_df[calc_df["Drift_Pct"] <= -drift_threshold_pct].sort_values(by="Drift_Pct", ascending=True)
+    total_deficit = float(abs(underweight["Dollar_Drift_NGN"]).sum()) if not underweight.empty else 0.0
 
-            model_results_list = []
-
-            for sym, df_ohlcv in ohlcv_dict.items():
-                if df_ohlcv.empty:
-                    continue
-
-                # Feature Matrix
-                feat_df = build_feature_matrix(df_ohlcv, macro_df)
-                market_data_for_risk[sym] = df_ohlcv
-                latest_price = float(df_ohlcv["Close"].iloc[-1])
-                latest_prices[sym] = latest_price
-
-                # Econometric GJR-GARCH Fit
-                garch_params, cond_vol = fit_gjr_garch(feat_df["Log_Return"])
-                vol_forecast = forecast_volatility_horizon(
-                    feat_df["Log_Return"], horizon_days=20
-                )
-                garch_vol_1d = vol_forecast["1D_predicted_vol_pct"]
-
-                # PyTorch Deep Learning Models
-                _, lstm_pred = train_lstm_forecaster(
-                    feat_df["Log_Return"], epochs=epochs_count
-                )
-                _, trans_pred = train_transformer_forecaster(
-                    feat_df["Log_Return"], epochs=epochs_count
-                )
-
-                # Unified Signal Score [-1, +1]
-                signal_res = generate_directional_signal_score(
-                    returns=feat_df["Log_Return"],
-                    garch_vol_pred=garch_vol_1d,
-                    lstm_return_pred=lstm_pred,
-                    transformer_return_pred=trans_pred,
-                )
-
-                signals_map[sym] = signal_res
-
-                model_results_list.append({
-                    "Symbol": sym.replace(".LG", ""),
-                    "Latest Price (₦)": f"₦{latest_price:,.2f}",
-                    "LSTM Return Pred": f"{lstm_pred * 100:.2f}%",
-                    "Transformer Pred": f"{trans_pred * 100:.2f}%",
-                    "1D GARCH Vol": f"{garch_vol_1d * 100:.2f}%",
-                    "Signal Score S_i": f"{signal_res['signal_score']:.3f}",
-                    "Action Signal": signal_res["recommended_action"],
+    if projected_cash >= min_order_floor and total_deficit > 0:
+        for _, row in underweight.iterrows():
+            deficit_ngn = abs(float(row["Dollar_Drift_NGN"]))
+            alloc_cash = projected_cash * (deficit_ngn / total_deficit)
+            close_px = float(row["Live_Price"])
+            limit_buy_px = round(close_px * (1.0 + buy_buffer_pct / 100.0), 2)
+            effective_unit_cost = limit_buy_px * (1.0 + fee_rate)
+            shares_to_buy = int(math.floor(alloc_cash / effective_unit_cost))
+            est_val = shares_to_buy * limit_buy_px
+            if shares_to_buy >= 1 and est_val >= min_order_floor:
+                buy_tickets.append({
+                    "Phase": "2 - ACCUMULATE DIP",
+                    "Ticker": row["Ticker"],
+                    "Action": "BUY",
+                    "Units": shares_to_buy,
+                    "Ref_Close_NGN": close_px,
+                    "Midnight_Limit_NGN": limit_buy_px,
+                    "Est_Order_Value_NGN": round(est_val, 2),
+                    "Rationale": f"Underweight by {row['Drift_Pct']:+.2f}% (+{buy_buffer_pct:.2f}% fee/auction buffer)"
                 })
 
-            st.dataframe(pd.DataFrame(model_results_list), use_container_width=True)
+    all_tickets = sell_tickets + buy_tickets
+    if all_tickets:
+        df_tickets = pd.DataFrame(all_tickets)
+        st.success(
+            f"Generated {len(sell_tickets)} Self-Funding SELL trim(s) and {len(buy_tickets)} BUY order(s) "
+            f"(Projected Cash Pool: ₦{projected_cash:,.2f}). Place these Limit Orders on Bamboo around 12:00 AM WAT:"
+        )
+        st.dataframe(
+            df_tickets.style.format({
+                "Ref_Close_NGN": "₦{:,.2f}",
+                "Midnight_Limit_NGN": "₦{:,.2f}",
+                "Est_Order_Value_NGN": "₦{:,.2f}",
+            }),
+            use_container_width=True,
+        )
 
-            # Step 4: Liquidity Screening & Risk Optimization
-            st.subheader("3. Risk Management & Portfolio Optimization")
+        if st.button("📝 Record Tonight's Order Ticket to Audit Ledger (`ngx_trade_audit.csv`)"):
+            now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            log_rows = pd.DataFrame([
+                {
+                    "Timestamp": now_utc,
+                    "Ticker": t["Ticker"],
+                    "Side": t["Action"],
+                    "Units": t["Units"],
+                    "Limit_Price_NGN": t["Midnight_Limit_NGN"],
+                    "Total_Value_NGN": t["Est_Order_Value_NGN"],
+                    "Status": "TICKET_READY_12AM_WAT",
+                    "Rationale": t["Rationale"],
+                }
+                for t in all_tickets
+            ])
+            log_rows.to_csv(AUDIT_FILE, mode="a", header=not os.path.exists(AUDIT_FILE), index=False)
+            st.success("Order ticket recorded to ngx_trade_audit.csv!")
+    else:
+        st.info("All 8 NGX holdings are currently balanced within your ±3.0% drift band. No overnight orders needed.")
 
-            eligible_tickers, rejections = apply_ngx_liquidity_and_friction_filter(
-                market_data_for_risk, signals_map
-            )
-
-            st.info(f"**Eligible Equities Cleared:** {eligible_tickers}")
-            if rejections:
-                st.warning(f"**Screening Rejections:** {rejections}")
-
-            # Combine returns for optimization
-            returns_comb = pd.DataFrame({
-                sym: market_data_for_risk[sym]["Close"].pct_change()
-                for sym in eligible_tickers
-                if sym in market_data_for_risk
-            }).dropna()
-
-            opt_results = optimize_ngx_portfolio_weights(
-                eligible_tickers=eligible_tickers,
-                returns_df=returns_comb,
-                signal_scores=signals_map,
-                portfolio_value_ngn=portfolio_capital_ngn,
-                max_single_stock_weight=max_single_stock_cap,
-                max_portfolio_var_pct=0.025,
-            )
-
-            # Render Allocation Breakdown Charts
-            opt_col1, opt_col2 = st.columns(2)
-
-            with opt_col1:
-                st.markdown("#### Optimized Capital Allocation")
-                weights_data = opt_results["stock_weights"].copy()
-                weights_data["Liquid NGN Cash Buffer"] = opt_results["cash_weight"]
-
-                fig_pie = px.pie(
-                    names=list(weights_data.keys()),
-                    values=list(weights_data.values()),
-                    title="Target Portfolio Weights",
-                    hole=0.4,
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-            with opt_col2:
-                st.markdown("#### Risk Metrics")
-                st.metric(
-                    "1-Day 95% Parametric VaR (₦)",
-                    f"₦{opt_results['1D_95_VaR_NGN']:,.2f}",
-                )
-                st.metric(
-                    "Allocated Capital (₦)",
-                    f"₦{opt_results['allocated_capital_ngn']:,.2f}",
-                )
-                st.metric(
-                    "Liquid Cash Buffer (₦)", f"₦{opt_results['cash_buffer_ngn']:,.2f}"
-                )
-
-            # Step 5: Execution, Minimum Floor Check & Live Order Dispatch
-            st.subheader("4. Live Order Generation & Broker Dispatch")
-
-            orders, req_cash = calculate_ngx_order_lots(
-                target_weights=opt_results["stock_weights"],
-                latest_prices=latest_prices,
-                portfolio_value_ngn=portfolio_capital_ngn,
-            )
-
-            valid_orders = []
-            sub_minimum_orders = []
-            for ord_item in orders:
-                order_amt = ord_item.get(
-                    "Amount_NGN",
-                    ord_item.get("Amount", ord_item.get("Target_Amount_NGN", 0.0)),
-                )
-                if isinstance(order_amt, str):
-                    order_amt = float(
-                        order_amt.replace("₦", "").replace(",", "").strip()
-                        if order_amt
-                        else 0.0
-                    )
-
-                if order_amt >= min_broker_order_floor:
-                    valid_orders.append(ord_item)
-                else:
-                    sub_minimum_orders.append(ord_item)
-
-            if sub_minimum_orders:
-                st.warning(
-                    f"⚠️ Held {len(sub_minimum_orders)} order(s) below the minimum"
-                    f" broker order floor of ₦{min_broker_order_floor:,.2f} to"
-                    " prevent exchange refund loops."
-                )
-
-            if valid_orders:
-                st.markdown("##### Generated Trade Orders Payload (Floor Validated)")
-                st.dataframe(pd.DataFrame(valid_orders), use_container_width=True)
-
-                dispatch_res = dispatch_rebalance_orders(
-                    orders=valid_orders,
-                    cash_buffer_ngn=opt_results["cash_buffer_ngn"],
-                    execution_mode=execution_mode,
-                )
-
-                st.success(
-                    f"🚀 Live Broker Rebalance Complete! Dispatched"
-                    f" {dispatch_res.get('orders_count', len(valid_orders))} live orders"
-                    " to broker interface."
-                )
-            else:
-                st.warning(
-                    "⚠️ No trade orders met the minimum broker order floor. Capital"
-                    " preserved in NGN liquid buffer."
-                )
+with tab_ledger:
+    st.subheader("📋 NGX Rebalance & Midnight Order Audit Ledger")
+    if os.path.exists(AUDIT_FILE):
+        df_log = pd.read_csv(AUDIT_FILE)
+        st.dataframe(df_log.sort_index(ascending=False), use_container_width=True)
+    else:
+        st.info("No audit entries recorded yet.")
