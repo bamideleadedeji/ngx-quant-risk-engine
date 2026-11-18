@@ -42,14 +42,14 @@ def load_state() -> tuple[pd.DataFrame, float]:
     return pd.DataFrame(DEFAULT_HOLDINGS), 0.0
 
 
-def send_telegram(text: str):
+ def send_telegram(text: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram credentials not found in environment; skipping Telegram push.")
         return
     clean_token = TELEGRAM_BOT_TOKEN.lstrip("/")
     if not clean_token.startswith("bot"):
         clean_token = "bot" + clean_token
-    url = "https://telegram.org" + clean_token + "/sendMessage"
+    url = "/".join(["https://telegram.org", clean_token, "sendMessage"])
     try:
         resp = requests.post(
             url,
@@ -61,7 +61,6 @@ def send_telegram(text: str):
             print(f"Telegram response: {resp.text}")
     except Exception as exc:
         print(f"Telegram dispatch error: {exc}")
-
 
 def run_nightly_rebalance_alert():
     wat_now = datetime.now(timezone.utc) + timedelta(hours=1)
