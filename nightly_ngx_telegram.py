@@ -1,14 +1,15 @@
 import os
 import json
 import math
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
-import requests
 import pandas as pd
 
 STATE_FILE = "ngx_portfolio_state.json"
 AUDIT_FILE = "ngx_trade_audit.csv"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+GMAIL_USER = os.getenv("GMAIL_USER", "bamideleadedeji2000@gmail.com").strip()
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "").strip().replace(" ", "")
 
 DEFAULT_HOLDINGS = [
     {"Ticker": "BUAFOODS", "Company": "BUA Foods Plc", "Units": 50.0, "Avg_Cost": 700.00, "Live_Price": 760.60, "Target_Weight_Pct": 16.0},
@@ -42,25 +43,22 @@ def load_state() -> tuple[pd.DataFrame, float]:
     return pd.DataFrame(DEFAULT_HOLDINGS), 0.0
 
 
-def send_telegram(text: str):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram credentials not found in environment; skipping Telegram push.")
+def send_email(subject: str, body: str):
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+        print("GMAIL_APP_PASSWORD not configured; skipping email dispatch.")
         return
-    clean_token = TELEGRAM_BOT_TOKEN.lstrip("/")
-    if not clean_token.startswith("bot"):
-        clean_token = "bot" + clean_token
-    url = "/".join(["https://telegram.org", clean_token, "sendMessage"])
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = GMAIL_USER
+    msg["To"] = GMAIL_USER
+    msg.set_content(body)
     try:
-        resp = requests.post(
-            url,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
-            timeout=15,
-        )
-        print(f"Telegram dispatch status: HTTP {resp.status_code}")
-        if resp.status_code != 200:
-            print(f"Telegram response: {resp.text}")
+        with smtplib.SMTP_SSL("://gmail.com", 465, timeout=20) as smtp:
+            smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            smtp.send_message(msg)
+        print(f"Email delivered successfully to {GMAIL_USER}!")
     except Exception as exc:
-        print(f"Telegram dispatch error: {exc}")
+        print(f"Email dispatch error: {exc}")
 
 
 def run_nightly_rebalance_alert():
@@ -125,20 +123,21 @@ def run_nightly_rebalance_alert():
                 })
 
     lines = [
-        "📈 NGX MIDNIGHT BAMBOO ORDER TICKET",
-        f"🕒 {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
-        f"💰 Portfolio Value: ₦{total_portfolio:,.2f} ({total_pnl:+,.2f})",
-        f"💵 Projected Internal Cash Pool: ₦{projected_cash:,.2f}",
-        "",
+        "NGX MIDNIGHT BAMBOO ORDER TICKET",
+        f"Timestamp: {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
+        f"Portfolio Value: NGN {total_portfolio:,.2f} ({total_pnl:+,.2f})",
+        f"Projected Internal Cash Pool: NGN {projected_cash:,.2f}",
+        "-" * 55,
     ]
 
     all_tickets = sell_tickets + buy_tickets
     if all_tickets:
+        subject = f"NGX Midnight Order Ticket ({len(all_tickets)} Orders) - {wat_now.strftime('%d %b %Y')}"
         lines.append("Place these Limit Orders on Bamboo at 12:00 AM WAT:")
         for t in sell_tickets:
-            lines.append(f"🔴 SELL {t['Units']} {t['Ticker']} @ ₦{t['Limit_NGN']:,.2f} (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(f"[SELL] {t['Units']} {t['Ticker']} @ NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
         for t in buy_tickets:
-            lines.append(f"🟢 BUY {t['Units']} {t['Ticker']} @ ₦{t['Limit_NGN']:,.2f} (~₦{t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(f"[BUY]  {t['Units']} {t['Ticker']} @ NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         pd.DataFrame([
@@ -149,17 +148,18 @@ def run_nightly_rebalance_alert():
                 "Units": t["Units"],
                 "Limit_Price_NGN": t["Limit_NGN"],
                 "Total_Value_NGN": t["Value_NGN"],
-                "Status": "TELEGRAM_TICKET_SENT",
+                "Status": "EMAIL_TICKET_SENT",
                 "Rationale": f"Drift {t['Drift']}",
             }
             for t in all_tickets
         ]).to_csv(AUDIT_FILE, mode="a", header=not os.path.exists(AUDIT_FILE), index=False)
     else:
-        lines.append("✅ Portfolio Balanced: All 8 NGX equities are within ±3.0% drift. No orders needed tonight.")
+        subject = f"NGX Portfolio Balanced (0 Orders) - {wat_now.strftime('%d %b %Y')}"
+        lines.append("Portfolio Balanced: All 8 NGX equities are within +/-3.0% drift. No orders needed tonight.")
 
-    msg = "\n".join(lines)
-    print(msg)
-    send_telegram(msg)
+    body = "\n".join(lines)
+    print(body)
+    send_email(subject, body)
 
 
 if __name__ == "__main__":
