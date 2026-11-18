@@ -1,4 +1,4 @@
-name: NGX Quant Engine — Midnight Bamboo Telegram Alert
+name: NGX Quant Engine — Midnight Bamboo Email Alert
 
 on:
   schedule:
@@ -24,12 +24,12 @@ jobs:
       - name: 3. Install Lightweight Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas requests yfinance
+          pip install pandas
 
-      - name: 4. Compute Self-Funding Order Ticket & Send Telegram Alert
+      - name: 4. Compute Self-Funding Order Ticket & Send Email Alert
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: |
           python nightly_ngx_telegram.py
 
