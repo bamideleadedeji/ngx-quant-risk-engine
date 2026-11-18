@@ -52,13 +52,15 @@ def send_email(subject: str, body: str):
     msg["From"] = GMAIL_USER
     msg["To"] = GMAIL_USER
     msg.set_content(body)
+    smtp_host = ".".join(["smtp", "gmail", "com"])
     try:
-        with smtplib.SMTP_SSL("://gmail.com", 465, timeout=20) as smtp:
+        with smtplib.SMTP_SSL(smtp_host, 465, timeout=20) as smtp:
             smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             smtp.send_message(msg)
         print(f"Email delivered successfully to {GMAIL_USER}!")
     except Exception as exc:
         print(f"Email dispatch error: {exc}")
+
 
 
 def run_nightly_rebalance_alert():
