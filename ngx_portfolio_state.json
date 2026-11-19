@@ -1,0 +1,70 @@
+{
+  "updated_at": "2026-11-19 10:39:21 UTC",
+  "free_cash_ngn": 0.0,
+  "holdings": [
+    {
+      "Ticker": "BUAFOODS",
+      "Company": "BUA Foods Plc",
+      "Units": 50.0,
+      "Avg_Cost": 700.0,
+      "Live_Price": 760.6,
+      "Target_Weight_Pct": 16.0
+    },
+    {
+      "Ticker": "SEPLAT",
+      "Company": "Seplat Energy Plc",
+      "Units": 2.0,
+      "Avg_Cost": 16000.1,
+      "Live_Price": 16241.9,
+      "Target_Weight_Pct": 16.0
+    },
+    {
+      "Ticker": "GTCO",
+      "Company": "Guaranty Trust Holding Co.",
+      "Units": 200.0,
+      "Avg_Cost": 120.9,
+      "Live_Price": 116.0,
+      "Target_Weight_Pct": 16.0
+    },
+    {
+      "Ticker": "MTNN",
+      "Company": "MTN Nigeria Comm. Plc",
+      "Units": 15.0,
+      "Avg_Cost": 825.0,
+      "Live_Price": 837.0,
+      "Target_Weight_Pct": 12.0
+    },
+    {
+      "Ticker": "ZENITHBANK",
+      "Company": "Zenith Bank Plc",
+      "Units": 100.0,
+      "Avg_Cost": 116.6,
+      "Live_Price": 114.0,
+      "Target_Weight_Pct": 12.0
+    },
+    {
+      "Ticker": "OKOMUOIL",
+      "Company": "Okomu Oil Palm Plc",
+      "Units": 10.0,
+      "Avg_Cost": 1148.6,
+      "Live_Price": 1137.1,
+      "Target_Weight_Pct": 10.0
+    },
+    {
+      "Ticker": "UNILEVER",
+      "Company": "Unilever Nigeria Plc",
+      "Units": 90.0,
+      "Avg_Cost": 111.92,
+      "Live_Price": 112.2,
+      "Target_Weight_Pct": 10.0
+    },
+    {
+      "Ticker": "TRANSCOHOT",
+      "Company": "Transcorp Hotels Plc",
+      "Units": 20.0,
+      "Avg_Cost": 275.3,
+      "Live_Price": 290.5,
+      "Target_Weight_Pct": 8.0
+    }
+  ]
+}
