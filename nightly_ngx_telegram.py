@@ -5,6 +5,7 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 import pandas as pd
+from ngx_live_prices import fetch_official_ngx_closes
 
 STATE_FILE = "ngx_portfolio_state.json"
 AUDIT_FILE = "ngx_trade_audit.csv"
@@ -43,6 +44,18 @@ def load_state() -> tuple[pd.DataFrame, float]:
     return pd.DataFrame(DEFAULT_HOLDINGS), 0.0
 
 
+def save_state(df: pd.DataFrame, free_cash: float):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "free_cash_ngn": float(free_cash),
+                "holdings": df.to_dict(orient="records"),
+            }, f, indent=2)
+    except Exception:
+        pass
+
+
 def send_email(subject: str, body: str):
     if not GMAIL_USER or not GMAIL_APP_PASSWORD:
         print("GMAIL_APP_PASSWORD not configured; skipping email dispatch.")
@@ -62,10 +75,16 @@ def send_email(subject: str, body: str):
         print(f"Email dispatch error: {exc}")
 
 
-
 def run_nightly_rebalance_alert():
     wat_now = datetime.now(timezone.utc) + timedelta(hours=1)
     df, free_cash = load_state()
+
+    live_prices, feed_status = fetch_official_ngx_closes(df["Ticker"].tolist())
+    if live_prices:
+        df["Live_Price"] = df.apply(
+            lambda r: live_prices.get(str(r["Ticker"]).strip().upper(), r["Live_Price"]), axis=1
+        )
+        save_state(df, free_cash)
 
     df["Cost_Value"] = df["Units"] * df["Avg_Cost"]
     df["Market_Value"] = df["Units"] * df["Live_Price"]
@@ -97,6 +116,7 @@ def run_nightly_rebalance_alert():
                 "Ticker": row["Ticker"],
                 "Action": "SELL",
                 "Units": shares_to_sell,
+                "Ref_Close": close_px,
                 "Limit_NGN": limit_sell_px,
                 "Value_NGN": round(gross_val, 2),
                 "Drift": f"{row['Drift_Pct']:+.2f}%",
@@ -119,6 +139,7 @@ def run_nightly_rebalance_alert():
                     "Ticker": row["Ticker"],
                     "Action": "BUY",
                     "Units": shares_to_buy,
+                    "Ref_Close": close_px,
                     "Limit_NGN": limit_buy_px,
                     "Value_NGN": round(est_val, 2),
                     "Drift": f"{row['Drift_Pct']:+.2f}%",
@@ -127,9 +148,10 @@ def run_nightly_rebalance_alert():
     lines = [
         "NGX MIDNIGHT BAMBOO ORDER TICKET",
         f"Timestamp: {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
+        f"Price Feed: {feed_status}",
         f"Portfolio Value: NGN {total_portfolio:,.2f} ({total_pnl:+,.2f})",
         f"Projected Internal Cash Pool: NGN {projected_cash:,.2f}",
-        "-" * 55,
+        "-" * 60,
     ]
 
     all_tickets = sell_tickets + buy_tickets
@@ -137,9 +159,13 @@ def run_nightly_rebalance_alert():
         subject = f"NGX Midnight Order Ticket ({len(all_tickets)} Orders) - {wat_now.strftime('%d %b %Y')}"
         lines.append("Place these Limit Orders on Bamboo at 12:00 AM WAT:")
         for t in sell_tickets:
-            lines.append(f"[SELL] {t['Units']} {t['Ticker']} @ NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(
+                f"[SELL] {t['Units']} {t['Ticker']} | Close: NGN {t['Ref_Close']:,.2f} -> Limit: NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}"
+            )
         for t in buy_tickets:
-            lines.append(f"[BUY]  {t['Units']} {t['Ticker']} @ NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}")
+            lines.append(
+                f"[BUY]  {t['Units']} {t['Ticker']} | Close: NGN {t['Ref_Close']:,.2f} -> Limit: NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}"
+            )
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         pd.DataFrame([
@@ -151,7 +177,7 @@ def run_nightly_rebalance_alert():
                 "Limit_Price_NGN": t["Limit_NGN"],
                 "Total_Value_NGN": t["Value_NGN"],
                 "Status": "EMAIL_TICKET_SENT",
-                "Rationale": f"Drift {t['Drift']}",
+                "Rationale": f"Close NGN {t['Ref_Close']:,.2f} | Drift {t['Drift']}",
             }
             for t in all_tickets
         ]).to_csv(AUDIT_FILE, mode="a", header=not os.path.exists(AUDIT_FILE), index=False)
@@ -166,3 +192,4 @@ def run_nightly_rebalance_alert():
 
 if __name__ == "__main__":
     run_nightly_rebalance_alert()
+ 
