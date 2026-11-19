@@ -208,93 +208,85 @@ with tab_rebalance:
             limit_buy_px = round(close_px * (1.0 + buy_buffer_pct / 100.0), 2)
             shares_to_buy = int(math.floor(alloc_cash / (limit_buy_px * (1.0 + fee_rate))))
             est_val = shares_to_buy * limit_buy_px
-            if shares_to_buy >= 1 and est_val >= min_order_floor:
-                fee_amt = est_val * fee_rate
-                total_buy_gross += est_val
-                total_est_fees += fee_amt
-                post_rebalance_cash = max(0.0, post_rebalance_cash - (est_val + fee_amt))
-                projected_units[row["Ticker"]] = float(projected_units[row["Ticker"]]) + shares_to_buy
-                buy_tickets.append({
-                    "Phase": "2 - ACCUMULATE DIP",
-                    "Ticker": row["Ticker"],
-                    "Action": "BUY",
-                    "Units": shares_to_buy,
-                    "Ref_Close_NGN": close_px,
-                    "Midnight_Limit_NGN": limit_buy_px,
-                    "Est_Order_Value_NGN": round(est_val, 2),
-                    "Drift": f"{row['Drift_Pct']:+.2f}%",
-                })
 
-    calc_df["Post_Units"] = calc_df["Ticker"].map(projected_units)
-    calc_df["Post_Market_Value"] = calc_df["Post_Units"] * calc_df["Live_Price"]
-    post_total_portfolio = float(calc_df["Post_Market_Value"].sum()) + post_rebalance_cash
-    calc_df["Post_Weight_Pct"] = (calc_df["Post_Market_Value"] / post_total_portfolio * 100.0) if post_total_portfolio > 0 else 0.0
-    calc_df["Post_Drift_Pct"] = calc_df["Post_Weight_Pct"] - calc_df["Norm_Target_Pct"]
-    mad_drift_after = float(calc_df["Post_Drift_Pct"].abs().mean()) if not calc_df.empty else 0.0
-
-    turnover_pct = ((total_sell_gross + total_buy_gross) / (2.0 * total_portfolio) * 100.0) if total_portfolio > 0 else 0.0
-    rolling_30d_turnover = compute_rolling_30d_turnover(turnover_pct)
-    fee_drag_pct = (total_est_fees / total_portfolio * 100.0) if total_portfolio > 0 else 0.0
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total NGX Portfolio", f"₦{total_portfolio:,.2f}", delta=f"₦{total_pnl:+,.2f} Unrealized")
-    m2.metric("Post-Rebalance Cash", f"₦{post_rebalance_cash:,.2f}", delta=f"Pre: ₦{effective_cash:,.2f}")
-    m3.metric("Mean Abs Drift (Before → After)", f"{mad_drift_before:.2f}% → {mad_drift_after:.2f}%", delta=f"Max: {max_drift_before:.2f}%")
-    m4.metric("Est. Brokerage Fees & Turnover", f"₦{total_est_fees:,.2f} ({fee_drag_pct:.2f}%)", delta=f"Turnover: {turnover_pct:.2f}%")
-
-    st.markdown("---")
-    st.subheader("2. Portfolio Weight Drift & Valuation Audit")
-
-    c_left, c_right = st.columns([3, 2])
-    with c_left:
-        display_cols = calc_df[[
-            "Ticker", "Units", "Live_Price", "Market_Value", "Return_Pct", "Actual_Weight_Pct", "Norm_Target_Pct", "Drift_Pct"
-        ]].copy()
-        display_cols.columns = [
-            "Ticker", "Units", "Close (₦)", "Value (₦)", "Gain/Loss (%)", "Actual (%)", "Target (%)", "Drift (%)"
-        ]
-        st.dataframe(
-            display_cols.style.format({
-                "Units": "{:.2f}",
-                "Close (₦)": "₦{:,.2f}",
-                "Value (₦)": "₦{:,.2f}",
-                "Gain/Loss (%)": "{:+.2f}%",
-                "Actual (%)": "{:.2f}%",
-                "Target (%)": "{:.2f}%",
-                "Drift (%)": "{:+.2f}%",
-            }),
-            use_container_width=True,
-        )
-    with c_right:
-        fig_alloc = px.pie(calc_df, names="Ticker", values="Market_Value", title="Current NGX Allocation", hole=0.42)
-        st.plotly_chart(fig_alloc, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("3. Tonight's 12:00 AM WAT Bamboo Pre-Market Order Ticket (Self-Funding)")
-
-    all_tickets = sell_tickets + buy_tickets
-    if all_tickets:
-        df_tickets = pd.DataFrame(all_tickets)
-        st.success(
-            f"Generated {len(sell_tickets)} Self-Funding SELL trim(s) and {len(buy_tickets)} BUY order(s) "
-            f"(Projected Cash Pool: ₦{projected_cash:,.2f} | Post-Rebalance Residual Cash: ₦{post_rebalance_cash:,.2f})."
-        )
-        st.dataframe(
-            df_tickets.style.format({
-                "Ref_Close_NGN": "₦{:,.2f}",
-                "Midnight_Limit_NGN": "₦{:,.2f}",
-                "Est_Order_Value_NGN": "₦{:,.2f}",
-            }),
-            use_container_width=True,
-        )
-
-        if st.button("📝 Record Tonight's Order Ticket & Portfolio Telemetry"):
-            utc_now = datetime.now(timezone.utc)
-            wat_now = utc_now + timedelta(hours=1)
-            pd.DataFrame([
-                {
-                    "Timestamp": utc_now.strftime("%Y-%m-%d %H:%M:%S UTC"),
-
+if shares_to_buy >= 1 and est_val >= min_order_floor:
+fee_amt = est_val * fee_rate
+total_buy_gross += est_val
+total_est_fees += fee_amt
+post_rebalance_cash = max(0.0, post_rebalance_cash - (est_val + fee_amt))
+projected_units[row["Ticker"]] = float(projected_units[row["Ticker"]]) + shares_to_buy
+buy_tickets.append({
+"Phase": "2 - ACCUMULATE DIP",
+"Ticker": row["Ticker"],
+"Action": "BUY",
+"Units": shares_to_buy,
+"Ref_Close_NGN": close_px,
+"Midnight_Limit_NGN": limit_buy_px,
+"Est_Order_Value_NGN": round(est_val, 2),
+"Drift": f"{row['Drift_Pct']:+.2f}%",
+})
+calc_df["Post_Units"] = calc_df["Ticker"].map(projected_units)
+calc_df["Post_Market_Value"] = calc_df["Post_Units"] * calc_df["Live_Price"]
+post_total_portfolio = float(calc_df["Post_Market_Value"].sum()) + post_rebalance_cash
+calc_df["Post_Weight_Pct"] = (calc_df["Post_Market_Value"] / post_total_portfolio * 100.0) if post_total_portfolio > 0 else 0.0
+calc_df["Post_Drift_Pct"] = calc_df["Post_Weight_Pct"] - calc_df["Norm_Target_Pct"]
+mad_drift_after = float(calc_df["Post_Drift_Pct"].abs().mean()) if not calc_df.empty else 0.0
+turnover_pct = ((total_sell_gross + total_buy_gross) / (2.0 * total_portfolio) * 100.0) if total_portfolio > 0 else 0.0
+rolling_30d_turnover = compute_rolling_30d_turnover(turnover_pct)
+fee_drag_pct = (total_est_fees / total_portfolio * 100.0) if total_portfolio > 0 else 0.0
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Total NGX Portfolio", f"₦{total_portfolio:,.2f}", delta=f"₦{total_pnl:+,.2f} Unrealized")
+m2.metric("Post-Rebalance Cash", f"₦{post_rebalance_cash:,.2f}", delta=f"Pre: ₦{effective_cash:,.2f}")
+m3.metric("Mean Abs Drift (Before → After)", f"{mad_drift_before:.2f}% → {mad_drift_after:.2f}%", delta=f"Max: {max_drift_before:.2f}%")
+m4.metric("Est. Brokerage Fees & Turnover", f"₦{total_est_fees:,.2f} ({fee_drag_pct:.2f}%)", delta=f"Turnover: {turnover_pct:.2f}%")
+st.markdown("---")
+st.subheader("2. Portfolio Weight Drift & Valuation Audit")
+c_left, c_right = st.columns()
+with c_left:
+display_cols = calc_df[[
+"Ticker", "Units", "Live_Price", "Market_Value", "Return_Pct", "Actual_Weight_Pct", "Norm_Target_Pct", "Drift_Pct"
+]].copy()
+display_cols.columns = [
+"Ticker", "Units", "Close (₦)", "Value (₦)", "Gain/Loss (%)", "Actual (%)", "Target (%)", "Drift (%)"
+]
+st.dataframe(
+display_cols.style.format({
+"Units": "{:.2f}",
+"Close (₦)": "₦{:,.2f}",
+"Value (₦)": "₦{:,.2f}",
+"Gain/Loss (%)": "{:+.2f}%",
+"Actual (%)": "{:.2f}%",
+"Target (%)": "{:.2f}%",
+"Drift (%)": "{:+.2f}%",
+}),
+use_container_width=True,
+)
+with c_right:
+fig_alloc = px.pie(calc_df, names="Ticker", values="Market_Value", title="Current NGX Allocation", hole=0.42)
+st.plotly_chart(fig_alloc, use_container_width=True)
+st.markdown("---")
+st.subheader("3. Tonight's 12:00 AM WAT Bamboo Pre-Market Order Ticket (Self-Funding)")
+all_tickets = sell_tickets + buy_tickets
+if all_tickets:
+df_tickets = pd.DataFrame(all_tickets)
+st.success(
+f"Generated {len(sell_tickets)} Self-Funding SELL trim(s) and {len(buy_tickets)} BUY order(s) "
+f"(Projected Cash Pool: ₦{projected_cash:,.2f} | Post-Rebalance Residual Cash: ₦{post_rebalance_cash:,.2f})."
+)
+st.dataframe(
+df_tickets.style.format({
+"Ref_Close_NGN": "₦{:,.2f}",
+"Midnight_Limit_NGN": "₦{:,.2f}",
+"Est_Order_Value_NGN": "₦{:,.2f}",
+}),
+use_container_width=True,
+)
+if st.button("📝 Record Tonight's Order Ticket & Portfolio Telemetry"):
+utc_now = datetime.now(timezone.utc)
+wat_now = utc_now + timedelta(hours=1)
+pd.DataFrame([
+{
+"Timestamp": utc_now.strftime("%Y-%m-%d %H:%M:%S UTC"),
 "Ticker": t["Ticker"],
 "Side": t["Action"],
 "Units": t["Units"],
