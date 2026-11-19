@@ -16,7 +16,6 @@ def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, floa
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    # Source 1: AFX Kwayisi NGX Official Daily Price Table
     afx_url = "https://" + "afx.kwayisi.org" + "/ngx/"
     try:
         resp = requests.get(afx_url, headers=headers, timeout=15)
@@ -40,7 +39,6 @@ def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, floa
     except Exception:
         pass
 
-    # Source 2: African Markets NGX Listed Companies Fallback for any remaining symbols
     missing = wanted - set(prices.keys())
     if missing:
         am_url = "https://" + "://african-markets.com" + "/en/stock-markets/ngse/listed-companies"
