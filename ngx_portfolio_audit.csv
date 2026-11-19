@@ -1,0 +1,2 @@
+Timestamp_UTC,Timestamp_WAT,Price_Feed_Status,Total_Portfolio_NGN,Equities_Value_NGN,Pre_Rebalance_Cash_NGN,Post_Rebalance_Cash_NGN,Max_Drift_Before_Pct,Mean_Abs_Drift_Before_Pct,Projected_Mean_Abs_Drift_After_Pct,Est_Brokerage_Fees_NGN,Fee_Drag_Pct,Cycle_Turnover_Pct,Rolling_30D_Turnover_Pct,Orders_Generated
+2026-11-19 10:10:11,2026-11-19 11:10:11,NGX PUBLIC FEED UNREACHABLE (Using saved portfolio prices — verify on Bamboo before ordering),145347.7,145347.7,0.0,919.64,10.16,4.15,1.82,422.7,0.291,9.38,9.38,5
