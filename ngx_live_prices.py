@@ -1,27 +1,15 @@
 import requests
 
-# Official TradingView NGX (NSENG) symbols for your 8 holdings
-NSENG_SYMBOLS = [
-    "NSENG:BUAFOODS",
-    "NSENG:SEPLAT",
-    "NSENG:GTCO",
-    "NSENG:MTNN",
-    "NSENG:ZENITHBANK",
-    "NSENG:OKOMUOIL",
-    "NSENG:UNILEVER",
-    "NSENG:TRANSCOHOT",
-]
-
 
 def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, float], str]:
     """
     Fetches official daily NGX (NSENG) closing prices directly via TradingView's
-    public Nigeria market scanner JSON endpoint (no HTML scraping or Cloudflare blocks).
+    public Nigeria market scanner JSON endpoint (vals[1] = close price).
     """
     wanted = {t.strip().upper() for t in target_tickers if t.strip()}
     prices: dict[str, float] = {}
 
-    scan_url = "https://scanner." + "tradingview.com" + "/nigeria/scan"
+    scan_url = "https://" + ".".join(["scanner", "tradingview", "com"]) + "/nigeria/scan"
     payload = {
         "symbols": {
             "tickers": [f"NSENG:{sym}" for sym in wanted],
@@ -42,9 +30,9 @@ def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, floa
                 full_sym = str(item.get("s", ""))
                 vals = item.get("d", [])
                 clean_sym = full_sym.split(":")[-1].strip().upper()
-                if clean_sym in wanted and len(vals) >= 2 and vals is not None:
+                if clean_sym in wanted and len(vals) >= 2 and vals[1] is not None:
                     try:
-                        px = float(vals)
+                        px = float(vals[1])
                         if px > 0:
                             prices[clean_sym] = round(px, 2)
                     except (TypeError, ValueError):
