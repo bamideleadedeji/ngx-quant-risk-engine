@@ -38,7 +38,9 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@://github.com"
-          git add ngx_trade_audit.csv ngx_portfolio_audit.csv ngx_portfolio_state.json || true
+          for f in ngx_trade_audit.csv ngx_portfolio_audit.csv ngx_portfolio_state.json; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
           git commit -m "auto: log 12:00 AM WAT Bamboo order ticket & portfolio telemetry" || true
           git push || true
  
