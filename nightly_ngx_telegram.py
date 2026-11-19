@@ -8,7 +8,8 @@ import pandas as pd
 from ngx_live_prices import fetch_official_ngx_closes
 
 STATE_FILE = "ngx_portfolio_state.json"
-AUDIT_FILE = "ngx_trade_audit.csv"
+ORDER_AUDIT_FILE = "ngx_trade_audit.csv"
+PORTFOLIO_AUDIT_FILE = "ngx_portfolio_audit.csv"
 GMAIL_USER = os.getenv("GMAIL_USER", "bamideleadedeji2000@gmail.com").strip()
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "").strip().replace(" ", "")
 
@@ -75,8 +76,23 @@ def send_email(subject: str, body: str):
         print(f"Email dispatch error: {exc}")
 
 
+def compute_rolling_30d_turnover(current_turnover_pct: float) -> float:
+    if not os.path.exists(PORTFOLIO_AUDIT_FILE):
+        return current_turnover_pct
+    try:
+        hist = pd.read_csv(PORTFOLIO_AUDIT_FILE)
+        if "Timestamp_UTC" in hist.columns and "Turnover_Pct" in hist.columns:
+            hist["Timestamp_UTC"] = pd.to_datetime(hist["Timestamp_UTC"], errors="coerce", utc=True)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            recent = hist[hist["Timestamp_UTC"] >= cutoff]
+            return float(recent["Turnover_Pct"].sum()) + current_turnover_pct
+    except Exception:
+        pass
+    return current_turnover_pct
+
 def run_nightly_rebalance_alert():
-    wat_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    utc_now = datetime.now(timezone.utc)
+    wat_now = utc_now + timedelta(hours=1)
     df, free_cash = load_state()
 
     live_prices, feed_status = fetch_official_ngx_closes(df["Ticker"].tolist())
@@ -100,8 +116,14 @@ def run_nightly_rebalance_alert():
     df["Drift_Pct"] = df["Actual_Weight_Pct"] - df["Norm_Target_Pct"]
     df["Dollar_Drift_NGN"] = df["Market_Value"] - (total_portfolio * (df["Norm_Target_Pct"] / 100.0))
 
+    max_drift_before = float(df["Drift_Pct"].abs().max()) if not df.empty else 0.0
+    mad_drift_before = float(df["Drift_Pct"].abs().mean()) if not df.empty else 0.0
+
     sell_tickets = []
     projected_cash = free_cash
+    total_sell_gross = 0.0
+    total_est_fees = 0.0
+    projected_units = dict(zip(df["Ticker"], df["Units"]))
 
     overweight = df[df["Drift_Pct"] >= DRIFT_BAND_PCT].sort_values(by="Drift_Pct", ascending=False)
     for _, row in overweight.iterrows():
@@ -111,7 +133,11 @@ def run_nightly_rebalance_alert():
         shares_to_sell = min(int(math.floor(excess_ngn / close_px)), int(math.floor(float(row["Units"]))))
         gross_val = shares_to_sell * limit_sell_px
         if shares_to_sell >= 1 and gross_val >= MIN_ORDER_FLOOR:
-            projected_cash += gross_val * (1.0 - FEE_RATE)
+            fee_amt = gross_val * FEE_RATE
+            projected_cash += (gross_val - fee_amt)
+            total_sell_gross += gross_val
+            total_est_fees += fee_amt
+            projected_units[row["Ticker"]] = max(0.0, float(projected_units[row["Ticker"]]) - shares_to_sell)
             sell_tickets.append({
                 "Ticker": row["Ticker"],
                 "Action": "SELL",
@@ -123,6 +149,8 @@ def run_nightly_rebalance_alert():
             })
 
     buy_tickets = []
+    total_buy_gross = 0.0
+    post_rebalance_cash = projected_cash
     underweight = df[df["Drift_Pct"] <= -DRIFT_BAND_PCT].sort_values(by="Drift_Pct", ascending=True)
     total_deficit = float(abs(underweight["Dollar_Drift_NGN"]).sum()) if not underweight.empty else 0.0
 
@@ -135,6 +163,11 @@ def run_nightly_rebalance_alert():
             shares_to_buy = int(math.floor(alloc_cash / (limit_buy_px * (1.0 + FEE_RATE))))
             est_val = shares_to_buy * limit_buy_px
             if shares_to_buy >= 1 and est_val >= MIN_ORDER_FLOOR:
+                fee_amt = est_val * FEE_RATE
+                total_buy_gross += est_val
+                total_est_fees += fee_amt
+                post_rebalance_cash = max(0.0, post_rebalance_cash - (est_val + fee_amt))
+                projected_units[row["Ticker"]] = float(projected_units[row["Ticker"]]) + shares_to_buy
                 buy_tickets.append({
                     "Ticker": row["Ticker"],
                     "Action": "BUY",
@@ -145,13 +178,44 @@ def run_nightly_rebalance_alert():
                     "Drift": f"{row['Drift_Pct']:+.2f}%",
                 })
 
+    df["Post_Units"] = df["Ticker"].map(projected_units)
+    df["Post_Market_Value"] = df["Post_Units"] * df["Live_Price"]
+    post_total_portfolio = float(df["Post_Market_Value"].sum()) + post_rebalance_cash
+    df["Post_Weight_Pct"] = (df["Post_Market_Value"] / post_total_portfolio * 100.0) if post_total_portfolio > 0 else 0.0
+    df["Post_Drift_Pct"] = df["Post_Weight_Pct"] - df["Norm_Target_Pct"]
+    mad_drift_after = float(df["Post_Drift_Pct"].abs().mean()) if not df.empty else 0.0
+
+    turnover_pct = ((total_sell_gross + total_buy_gross) / (2.0 * total_portfolio) * 100.0) if total_portfolio > 0 else 0.0
+    rolling_30d_turnover = compute_rolling_30d_turnover(turnover_pct)
+    fee_drag_pct = (total_est_fees / total_portfolio * 100.0) if total_portfolio > 0 else 0.0
+
+    pd.DataFrame([{
+        "Timestamp_UTC": utc_now.strftime("%Y-%m-%d %H:%M:%S"),
+        "Timestamp_WAT": wat_now.strftime("%Y-%m-%d %H:%M:%S"),
+        "Price_Feed_Status": feed_status,
+        "Total_Portfolio_NGN": round(total_portfolio, 2),
+        "Equities_Value_NGN": round(equity_total, 2),
+        "Pre_Rebalance_Cash_NGN": round(free_cash, 2),
+        "Post_Rebalance_Cash_NGN": round(post_rebalance_cash, 2),
+        "Max_Drift_Before_Pct": round(max_drift_before, 2),
+        "Mean_Abs_Drift_Before_Pct": round(mad_drift_before, 2),
+        "Projected_Mean_Abs_Drift_After_Pct": round(mad_drift_after, 2),
+        "Est_Brokerage_Fees_NGN": round(total_est_fees, 2),
+        "Fee_Drag_Pct": round(fee_drag_pct, 3),
+        "Cycle_Turnover_Pct": round(turnover_pct, 2),
+        "Rolling_30D_Turnover_Pct": round(rolling_30d_turnover, 2),
+        "Orders_Generated": len(sell_tickets) + len(buy_tickets),
+    }]).to_csv(PORTFOLIO_AUDIT_FILE, mode="a", header=not os.path.exists(PORTFOLIO_AUDIT_FILE), index=False)
+
     lines = [
-        "NGX MIDNIGHT BAMBOO ORDER TICKET",
+        "NGX MIDNIGHT BAMBOO ORDER TICKET & PORTFOLIO TELEMETRY",
         f"Timestamp: {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
         f"Price Feed: {feed_status}",
         f"Portfolio Value: NGN {total_portfolio:,.2f} ({total_pnl:+,.2f})",
-        f"Projected Internal Cash Pool: NGN {projected_cash:,.2f}",
-        "-" * 60,
+        f"Cash (Pre -> Post Rebalance): NGN {free_cash:,.2f} -> NGN {post_rebalance_cash:,.2f}",
+        f"Mean Abs Drift (Before -> After): {mad_drift_before:.2f}% -> {mad_drift_after:.2f}% (Max Drift: {max_drift_before:.2f}%)",
+        f"Est. Brokerage Fees: NGN {total_est_fees:,.2f} ({fee_drag_pct:.3f}% of portfolio) | Turnover: {turnover_pct:.2f}% (30D: {rolling_30d_turnover:.2f}%)",
+        "-" * 65,
     ]
 
     all_tickets = sell_tickets + buy_tickets
@@ -167,10 +231,9 @@ def run_nightly_rebalance_alert():
                 f"[BUY]  {t['Units']} {t['Ticker']} | Close: NGN {t['Ref_Close']:,.2f} -> Limit: NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}"
             )
 
-        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         pd.DataFrame([
             {
-                "Timestamp": now_utc,
+                "Timestamp": utc_now.strftime("%Y-%m-%d %H:%M:%S UTC"),
                 "Ticker": t["Ticker"],
                 "Side": t["Action"],
                 "Units": t["Units"],
@@ -180,7 +243,7 @@ def run_nightly_rebalance_alert():
                 "Rationale": f"Close NGN {t['Ref_Close']:,.2f} | Drift {t['Drift']}",
             }
             for t in all_tickets
-        ]).to_csv(AUDIT_FILE, mode="a", header=not os.path.exists(AUDIT_FILE), index=False)
+        ]).to_csv(ORDER_AUDIT_FILE, mode="a", header=not os.path.exists(ORDER_AUDIT_FILE), index=False)
     else:
         subject = f"NGX Portfolio Balanced (0 Orders) - {wat_now.strftime('%d %b %Y')}"
         lines.append("Portfolio Balanced: All 8 NGX equities are within +/-3.0% drift. No orders needed tonight.")
@@ -192,4 +255,3 @@ def run_nightly_rebalance_alert():
 
 if __name__ == "__main__":
     run_nightly_rebalance_alert()
- 
