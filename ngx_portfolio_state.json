@@ -45,7 +45,7 @@
     {
       "Ticker": "OKOMUOIL",
       "Company": "Okomu Oil Palm Plc",
-      "Units": 10.0,
+      "Units": 14.0,
       "Avg_Cost": 1148.6,
       "Live_Price": 1137.1,
       "Target_Weight_Pct": 10.0
@@ -53,7 +53,7 @@
     {
       "Ticker": "UNILEVER",
       "Company": "Unilever Nigeria Plc",
-      "Units": 85.0,
+      "Units": 118.0,
       "Avg_Cost": 111.92,
       "Live_Price": 112.2,
       "Target_Weight_Pct": 10.0
@@ -61,7 +61,7 @@
     {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 20.0,
+      "Units": 28.0,
       "Avg_Cost": 275.3,
       "Live_Price": 290.5,
       "Target_Weight_Pct": 8.0
