@@ -1,5 +1,5 @@
-﻿{
-  "updated_at": "2026-11-24 06:06:17 UTC",
+{
+  "updated_at": "2026-11-24 14:49:58 UTC",
   "free_cash_ngn": 948.67,
   "holdings": [
     {
@@ -23,14 +23,14 @@
       "Company": "Guaranty Trust Holding Co.",
       "Units": 200.0,
       "Avg_Cost": 120.9,
-      "Live_Price": 112.0,
+      "Live_Price": 114.0,
       "Target_Weight_Pct": 16.0
     },
     {
       "Ticker": "MTNN",
       "Company": "MTN Nigeria Comm. Plc",
-      "Units": 15.0,
-      "Avg_Cost": 825.0,
+      "Units": 23.0,
+      "Avg_Cost": 821.69,
       "Live_Price": 837.0,
       "Target_Weight_Pct": 12.0
     },
@@ -39,14 +39,14 @@
       "Company": "Zenith Bank Plc",
       "Units": 100.0,
       "Avg_Cost": 116.6,
-      "Live_Price": 108.5,
+      "Live_Price": 110.5,
       "Target_Weight_Pct": 12.0
     },
     {
       "Ticker": "OKOMUOIL",
       "Company": "Okomu Oil Palm Plc",
       "Units": 14.0,
-      "Avg_Cost": 1148.6,
+      "Avg_Cost": 1117.57,
       "Live_Price": 1137.1,
       "Target_Weight_Pct": 10.0
     },
@@ -54,15 +54,15 @@
       "Ticker": "UNILEVER",
       "Company": "Unilever Nigeria Plc",
       "Units": 118.0,
-      "Avg_Cost": 111.92,
+      "Avg_Cost": 109.6,
       "Live_Price": 112.2,
       "Target_Weight_Pct": 10.0
     },
     {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 28.0,
-      "Avg_Cost": 275.3,
+      "Units": 38.0,
+      "Avg_Cost": 275.23,
       "Live_Price": 290.5,
       "Target_Weight_Pct": 8.0
     }
