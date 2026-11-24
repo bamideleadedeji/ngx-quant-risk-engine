@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-23 02:50:38 UTC",
-  "free_cash_ngn": 10223.40,
+  "updated_at": "2026-11-24 06:06:17 UTC",
+  "free_cash_ngn": 10223.4,
   "holdings": [
     {
       "Ticker": "BUAFOODS",
@@ -23,7 +23,7 @@
       "Company": "Guaranty Trust Holding Co.",
       "Units": 200.0,
       "Avg_Cost": 120.9,
-      "Live_Price": 114.0,
+      "Live_Price": 112.0,
       "Target_Weight_Pct": 16.0
     },
     {
@@ -39,7 +39,7 @@
       "Company": "Zenith Bank Plc",
       "Units": 100.0,
       "Avg_Cost": 116.6,
-      "Live_Price": 110.5,
+      "Live_Price": 108.5,
       "Target_Weight_Pct": 12.0
     },
     {
