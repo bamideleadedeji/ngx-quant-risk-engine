@@ -1,4 +1,4 @@
-﻿ """
+﻿"""
 NGX Quantitative Engine - Self-Funding Cashless Rebalancer & Midnight CardinalStone Order-Ticket Generator
 Tracks live CSCS/CardinalStone holdings, trims overweight gainers to fund underweight blue-chips without external cash,
 and computes +1.25% pre-market limit prices for 12:00 AM WAT execution.
