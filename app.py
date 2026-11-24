@@ -179,13 +179,13 @@ def compute_rebalance(df_in, cash_in, drift_band, buy_buf, sell_buf, min_floor):
     }
     return df, sells + buys, metrics
 st.sidebar.title("🕹️ NGX Execution Controls")
-cash_in = st.sidebar.number_input("Cleared Bamboo NGN Cash (₦)", 0.0, 500000000.0, 0.0, 500.0, format="%.2f")
+cash_in = st.sidebar.number_input("Cleared CardinalStone NGN Cash (₦)", 0.0, 500000000.0, 0.0, 500.0, format="%.2f")
 drift_band = st.sidebar.slider("Rebalance Drift Band (%)", 1.5, 10.0, 3.0, 0.5)
 buy_buf = st.sidebar.slider("12:00 AM Buy Buffer (%)", 0.50, 3.00, 1.25, 0.25)
 sell_buf = st.sidebar.slider("12:00 AM Sell Buffer (%)", 0.00, 2.50, 1.00, 0.25)
-min_floor = st.sidebar.number_input("Min Bamboo Order (₦)", 500.0, 25000.0, 1500.0, 250.0)
+min_floor = st.sidebar.number_input("Min CardinalStone Order (₦)", 500.0, 25000.0, 1500.0, 250.0)
 
-st.title("📈 NGX Self-Funding Portfolio & Midnight Bamboo Order Engine")
+st.title("📈 NGX Self-Funding Portfolio & Midnight CardinalStone Order Engine")
 tab1, tab2, tab3 = st.tabs(["⚖️ Rebalancer & Order Ticket", "📊 5-Metric Portfolio Telemetry", "📋 Trade Audit Ledger"])
 
 with tab1:
@@ -220,7 +220,7 @@ with tab1:
         fig_pie = px.pie(calc_df, names="Ticker", values="Market_Value", title="Current NGX Allocation", hole=0.4)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    st.subheader("Tonight's 12:00 AM WAT Bamboo Order Ticket")
+    st.subheader("Tonight's 12:00 AM WAT CardinalStone Order Ticket")
     if tickets:
         st.dataframe(pd.DataFrame(tickets), use_container_width=True)
         if st.button("📝 Record Order Ticket & Portfolio Telemetry"):
@@ -240,3 +240,4 @@ with tab3:
         st.dataframe(pd.read_csv(ORDER_AUDIT_FILE).sort_index(ascending=False), use_container_width=True)
     if not os.path.exists(ORDER_AUDIT_FILE):
         st.info("No orders logged yet.")
+

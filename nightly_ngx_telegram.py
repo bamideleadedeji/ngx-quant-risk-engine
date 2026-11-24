@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import math
 import smtplib
@@ -208,7 +208,7 @@ def run_nightly_rebalance_alert():
     }]).to_csv(PORTFOLIO_AUDIT_FILE, mode="a", header=not os.path.exists(PORTFOLIO_AUDIT_FILE), index=False)
 
     lines = [
-        "NGX MIDNIGHT BAMBOO ORDER TICKET & PORTFOLIO TELEMETRY",
+        "NGX MIDNIGHT CARDINALSTONE ORDER TICKET & PORTFOLIO TELEMETRY",
         f"Timestamp: {wat_now.strftime('%Y-%m-%d %I:%M %p WAT')}",
         f"Price Feed: {feed_status}",
         f"Portfolio Value: NGN {total_portfolio:,.2f} ({total_pnl:+,.2f})",
@@ -221,7 +221,7 @@ def run_nightly_rebalance_alert():
     all_tickets = sell_tickets + buy_tickets
     if all_tickets:
         subject = f"NGX Midnight Order Ticket ({len(all_tickets)} Orders) - {wat_now.strftime('%d %b %Y')}"
-        lines.append("Place these Limit Orders on Bamboo at 12:00 AM WAT:")
+        lines.append("Place these Limit Orders on CardinalStone at 12:00 AM WAT:")
         for t in sell_tickets:
             lines.append(
                 f"[SELL] {t['Units']} {t['Ticker']} | Close: NGN {t['Ref_Close']:,.2f} -> Limit: NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | Drift {t['Drift']}"
@@ -255,3 +255,4 @@ def run_nightly_rebalance_alert():
 
 if __name__ == "__main__":
     run_nightly_rebalance_alert()
+

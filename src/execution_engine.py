@@ -1,6 +1,6 @@
-"""
+﻿"""
 ===============================================================================
-NGX Quantitative Engine — Phase 5: Automated Rebalancing & Execution Engine
+NGX Quantitative Engine â€” Phase 5: Automated Rebalancing & Execution Engine
 File: src/execution_engine.py
 ===============================================================================
 Description:
@@ -11,10 +11,10 @@ Description:
 Features:
     - Calculates exact round-lot integer units based on live market prices
     - Computes SEC, CSCS, NSE, and broker fee breakdowns (~1.39% total buy cost)
-    - Enforces micro-capital friendly order thresholds (₦1,000 min limit)
+    - Enforces micro-capital friendly order thresholds (â‚¦1,000 min limit)
     - Calculates Dynamic Smart Limit Prices (+1.5% auction buffer) to prevent overnight gap-up rejections
     - Dispatches instant execution notifications with interactive Tap-and-Execute buttons via Telegram (@ngx_quant_risk_bot)
-    - Triggers hands-free execution via Playwright Headless Bridge (src/bamboo_bridge.py)
+    - Triggers hands-free execution via Playwright Headless Bridge (src/cardinalstone_bridge.py)
     - Appends timestamped audit logs to persistent CSV ledger (`ngx_trade_audit.csv`)
 ===============================================================================
 """
@@ -29,12 +29,12 @@ import requests
 
 # Import Headless Automated Execution Bridge
 try:
-    from src.bamboo_bridge import execute_bamboo_trade_headless
+    from src.cardinalstone_bridge import execute_cardinalstone_trade_headless
 except ImportError:
     try:
-        from bamboo_bridge import execute_bamboo_trade_headless
+        from cardinalstone_bridge import execute_cardinalstone_trade_headless
     except ImportError:
-        execute_bamboo_trade_headless = None
+        execute_cardinalstone_trade_headless = None
 
 
 # =============================================================================
@@ -53,7 +53,7 @@ TOTAL_BUY_FEE_PCT = (
 )  # ~1.39%
 
 MIN_ORDER_VALUE_NGN = (
-    1_000.0  # ₦1,000 minimum trade size for micro-capital trading
+    1_000.0  # â‚¦1,000 minimum trade size for micro-capital trading
 )
 
 
@@ -98,31 +98,31 @@ def send_telegram_trade_signal(
         chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token or not chat_id:
-        print("⚠️ Telegram credentials missing in Streamlit secrets / os.environ.")
+        print("âš ï¸ Telegram credentials missing in Streamlit secrets / os.environ.")
         return False
 
     if execution_status in ["FILLED", "FILLED_AUTOTRADE"]:
-        status_header = "🚀 *NGX QUANT ENGINE — NIGHT-QUEUE SIGNAL DISPATCHED*"
+        status_header = "ðŸš€ *NGX QUANT ENGINE â€” NIGHT-QUEUE SIGNAL DISPATCHED*"
         status_body = (
-            f"✅ *Queue Status:* `QUEUED_FOR_AUCTION`\n🧾 *Receipt:* `{ticket_info}`"
+            f"âœ… *Queue Status:* `QUEUED_FOR_AUCTION`\nðŸ§¾ *Receipt:* `{ticket_info}`"
         )
     else:
-        status_header = "🌙 *NGX QUANT ENGINE — NIGHT-QUEUE PREP*"
-        status_body = f"❌ *Broker Order Status:* `PENDING NIGHT QUEUE`\n🔍 *Reason:* `{ticket_info}`"
+        status_header = "ðŸŒ™ *NGX QUANT ENGINE â€” NIGHT-QUEUE PREP*"
+        status_body = f"âŒ *Broker Order Status:* `PENDING NIGHT QUEUE`\nðŸ” *Reason:* `{ticket_info}`"
 
     smart_limit = order.get('smart_limit_price_ngn', order.get('unit_price_ngn', 0.0))
 
     message = (
         f"{status_header}\n\n"
-        f"📌 *Action:* `{order.get('action', 'BUY')}`\n"
-        f"📈 *Ticker:* `{order.get('symbol')}`\n"
-        f"🔢 *Units:* `{order.get('units', 0):,} shares`\n"
-        f"💵 *Prev Close:* `₦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
-        f"🎯 *Smart Limit Price:* `₦{smart_limit:,.2f} (+1.5% Buffer)`\n"
-        f"💰 *Gross Value:* `₦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
-        f"🧾 *Est. Fees (1.39%):* `₦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
-        f"💼 *Wallet Cash Remaining:* `₦{cash_buffer_ngn:,.2f}`\n\n"
-        f"📲 *Execution Outcome:*\n{status_body}"
+        f"ðŸ“Œ *Action:* `{order.get('action', 'BUY')}`\n"
+        f"ðŸ“ˆ *Ticker:* `{order.get('symbol')}`\n"
+        f"ðŸ”¢ *Units:* `{order.get('units', 0):,} shares`\n"
+        f"ðŸ’µ *Prev Close:* `â‚¦{order.get('unit_price_ngn', 0.0):,.2f}`\n"
+        f"ðŸŽ¯ *Smart Limit Price:* `â‚¦{smart_limit:,.2f} (+1.5% Buffer)`\n"
+        f"ðŸ’° *Gross Value:* `â‚¦{order.get('gross_value_ngn', 0.0):,.2f}`\n"
+        f"ðŸ§¾ *Est. Fees (1.39%):* `â‚¦{order.get('total_fee_ngn', 0.0):,.2f}`\n"
+        f"ðŸ’¼ *Wallet Cash Remaining:* `â‚¦{cash_buffer_ngn:,.2f}`\n\n"
+        f"ðŸ“² *Execution Outcome:*\n{status_body}"
     )
 
     # Interactive Tap-and-Execute Inline Keyboard Button
@@ -130,7 +130,7 @@ def send_telegram_trade_signal(
         "inline_keyboard": [
             [
                 {
-                    "text": f"✅ Queue {order.get('units', 0):,} of {order.get('symbol')}",
+                    "text": f"âœ… Queue {order.get('units', 0):,} of {order.get('symbol')}",
                     "callback_data": f"EXEC_{order.get('symbol')}_{order.get('units', 0)}",
                 }
             ]
@@ -149,7 +149,7 @@ def send_telegram_trade_signal(
         res = requests.post(url, json=payload, timeout=10)
         return res.status_code == 200
     except Exception as e:
-        print(f"❌ Failed to dispatch Telegram trade alert: {str(e)}")
+        print(f"âŒ Failed to dispatch Telegram trade alert: {str(e)}")
         return False
 
 
@@ -181,7 +181,7 @@ def calculate_ngx_order_lots(
         # Enforce Minimum Order Threshold
         if target_allocation_ngn < MIN_ORDER_VALUE_NGN:
             print(
-                f"  ⚠️ Skipping {symbol}: Order value ₦{target_allocation_ngn:,.2f} < ₦1k minimum limit."
+                f"  âš ï¸ Skipping {symbol}: Order value â‚¦{target_allocation_ngn:,.2f} < â‚¦1k minimum limit."
             )
             continue
 
@@ -246,11 +246,11 @@ def dispatch_rebalance_orders(
         ticket_info = "AWAITING_MORNING_AUCTION"
 
         # 1. Trigger Hands-Free Automated Playwright Bridge FIRST (if available)
-        if execute_bamboo_trade_headless is not None:
+        if execute_cardinalstone_trade_headless is not None:
             print(
-                f"⚡ Dispatching Playwright headless order for {order['symbol']}..."
+                f"âš¡ Dispatching Playwright headless order for {order['symbol']}..."
             )
-            bridge_res = execute_bamboo_trade_headless(order)
+            bridge_res = execute_cardinalstone_trade_headless(order)
 
             if bridge_res.get("status") == "FILLED":
                 execution_status = "FILLED_AUTOTRADE"
@@ -262,7 +262,7 @@ def dispatch_rebalance_orders(
                 ticket_info = bridge_res.get("reason", "EXECUTION_ERROR")
         else:
             print(
-                "⚠️ Playwright execute_bamboo_trade_headless module not imported."
+                "âš ï¸ Playwright execute_cardinalstone_trade_headless module not imported."
             )
 
         # 2. Send Interactive Telegram Alert with Tap-and-Execute Button
@@ -309,11 +309,11 @@ def dispatch_rebalance_orders(
 
 
 if __name__ == "__main__":
-    print("🚀 Testing Phase 5 Automated Rebalancing & Execution Engine with Dynamic Limit Pricing...")
+    print("ðŸš€ Testing Phase 5 Automated Rebalancing & Execution Engine with Dynamic Limit Pricing...")
 
     mock_weights = {"ZENITHBANK.LG": 0.50, "GTCO.LG": 0.50}
     mock_prices = {"ZENITHBANK.LG": 61.63, "GTCO.LG": 47.71}
-    portfolio_capital = 14_850.0  # ₦14,850 Bamboo balance
+    portfolio_capital = 14_850.0  # â‚¦14,850 CardinalStone balance
 
     orders, req_cash = calculate_ngx_order_lots(
         mock_weights, mock_prices, portfolio_capital
@@ -326,3 +326,4 @@ if __name__ == "__main__":
     print(json.dumps(orders, indent=2))
     print("\n--- Execution Audit Summary ---")
     print(json.dumps(summary, indent=2))
+

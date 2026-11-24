@@ -1,11 +1,11 @@
-"""
+﻿"""
 ===============================================================================
-NGX Quantitative Engine — Headless Browser Execution Bridge (Pathway B)
-File: src/bamboo_bridge.py
+NGX Quantitative Engine â€” Headless Browser Execution Bridge (Pathway B)
+File: src/cardinalstone_bridge.py
 ===============================================================================
 Description:
-    Automates 100% hands-off order execution on Bamboo using Playwright.
-    Logs into Bamboo web interface, uses in-app search UI, inputs share lots,
+    Automates 100% hands-off order execution on CardinalStone using Playwright.
+    Logs into CardinalStone web interface, uses in-app search UI, inputs share lots,
     submits order, and asserts order completion receipts.
 ===============================================================================
 """
@@ -21,34 +21,34 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-# Target Bamboo Endpoints
-BAMBOO_LOGIN_URL = "https://app.investbamboo.com/login"
-BAMBOO_DASHBOARD_URL = "https://app.investbamboo.com/app/trade"
-SESSION_FILE = "bamboo_session.json"
+# Target CardinalStone Endpoints
+CARDINALSTONE_LOGIN_URL = "https://app.investcardinalstone.com/login"
+CARDINALSTONE_DASHBOARD_URL = "https://app.investcardinalstone.com/app/trade"
+SESSION_FILE = "cardinalstone_session.json"
 
 
-def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
-  """Launches a headless Chromium instance, authenticates with Bamboo, uses in-app
+def execute_cardinalstone_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
+  """Launches a headless Chromium instance, authenticates with CardinalStone, uses in-app
 
   search bar to navigate to target NGX equity, and verifies order completion.
   """
-  email = os.environ.get("BAMBOO_EMAIL")
-  password = os.environ.get("BAMBOO_PASSWORD")
-  pin = os.environ.get("BAMBOO_PIN", "1234")
+  email = os.environ.get("CARDINALSTONE_EMAIL")
+  password = os.environ.get("CARDINALSTONE_PASSWORD")
+  pin = os.environ.get("CARDINALSTONE_PIN", "1234")
 
   if not email or not password:
     try:
       import streamlit as st
 
-      email = email or st.secrets.get("BAMBOO_EMAIL")
-      password = password or st.secrets.get("BAMBOO_PASSWORD")
-      pin = st.secrets.get("BAMBOO_PIN", pin)
+      email = email or st.secrets.get("CARDINALSTONE_EMAIL")
+      password = password or st.secrets.get("CARDINALSTONE_PASSWORD")
+      pin = st.secrets.get("CARDINALSTONE_PIN", pin)
     except Exception:
       pass
 
   if not email or not password:
     print(
-        "❌ Execution Bridge Error: BAMBOO_EMAIL or BAMBOO_PASSWORD credentials"
+        "âŒ Execution Bridge Error: CARDINALSTONE_EMAIL or CARDINALSTONE_PASSWORD credentials"
         " not found."
     )
     return {"status": "FAILED", "reason": "MISSING_CREDENTIALS"}
@@ -60,12 +60,12 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
   target_price = float(order.get("unit_price_ngn", 0.0))
 
   if units <= 0 or not symbol:
-    print(f"⚠️ Invalid Order Payload: Symbol='{symbol}', Units={units}")
+    print(f"âš ï¸ Invalid Order Payload: Symbol='{symbol}', Units={units}")
     return {"status": "SKIPPED", "reason": "INVALID_ORDER_PARAMS"}
 
   print(
-      f"🚀 Initializing Headless Execution Bridge for {symbol} ({units} shares"
-      f" @ ₦{target_price:,.2f})..."
+      f"ðŸš€ Initializing Headless Execution Bridge for {symbol} ({units} shares"
+      f" @ â‚¦{target_price:,.2f})..."
   )
 
   with sync_playwright() as p:
@@ -79,7 +79,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     if os.path.exists(SESSION_FILE):
-      print("🔑 Found existing session state. Loading cookies...")
+      print("ðŸ”‘ Found existing session state. Loading cookies...")
       context = browser.new_context(
           storage_state=SESSION_FILE,
           user_agent=(
@@ -99,14 +99,14 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
       # Step 1: Authenticate
-      page.goto(BAMBOO_LOGIN_URL, timeout=45000, wait_until="networkidle")
+      page.goto(CARDINALSTONE_LOGIN_URL, timeout=45000, wait_until="networkidle")
       page.wait_for_timeout(3000)
 
       email_input = page.locator(
           "input[type='email'], input[name='email']"
       ).first
       if email_input.is_visible():
-        print("🔑 Authenticating with Bamboo Web Interface...")
+        print("ðŸ”‘ Authenticating with CardinalStone Web Interface...")
         email_input.fill(email)
         page.fill("input[type='password'], input[name='password']", password)
 
@@ -120,7 +120,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         # Step 2: Security PIN Check
         pin_inputs = page.locator("input[type='password'], input[type='tel']")
         if pin_inputs.count() >= 4:
-          print("🔒 Entering Security PIN...")
+          print("ðŸ”’ Entering Security PIN...")
           for idx, char in enumerate(str(pin)):
             if idx < pin_inputs.count():
               pin_inputs.nth(idx).fill(char)
@@ -129,14 +129,14 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         context.storage_state(path=SESSION_FILE)
 
       # Step 3: Navigate to Main Trade Dashboard
-      print(f"🔍 Navigating to Bamboo Trading Dashboard...")
+      print(f"ðŸ” Navigating to CardinalStone Trading Dashboard...")
       page.goto(
-          BAMBOO_DASHBOARD_URL, timeout=45000, wait_until="networkidle"
+          CARDINALSTONE_DASHBOARD_URL, timeout=45000, wait_until="networkidle"
       )
       page.wait_for_timeout(3000)
 
       # Step 4: Use In-App Search Bar to Find Asset
-      print(f"🔍 Searching for asset {symbol} using in-app search...")
+      print(f"ðŸ” Searching for asset {symbol} using in-app search...")
       search_input = page.locator(
           "input[placeholder*='Search'], input[type='search'],"
           " input[name*='search']"
@@ -148,7 +148,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         page.wait_for_timeout(3000)
       else:
         page.goto(
-            f"https://app.investbamboo.com/app/stock/{symbol}",
+            f"https://app.investcardinalstone.com/app/stock/{symbol}",
             timeout=30000,
             wait_until="networkidle",
         )
@@ -161,7 +161,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
         page.wait_for_timeout(2000)
 
       # Step 6: Fill Share Quantity & Submit Order
-      print(f"⚡ Setting order quantity: {units} shares of {symbol}...")
+      print(f"âš¡ Setting order quantity: {units} shares of {symbol}...")
 
       buy_btn = page.locator("button:has-text('Buy')").first
       if buy_btn.is_visible():
@@ -202,7 +202,7 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
       else:
         page.keyboard.press("Enter")
 
-      print("⏳ Waiting for order completion receipt...")
+      print("â³ Waiting for order completion receipt...")
       page.wait_for_timeout(5000)
 
       # Fixed receipt assertion using robust multi-locator check
@@ -233,15 +233,16 @@ def execute_bamboo_trade_headless(order: Dict[str, Any]) -> Dict[str, Any]:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
       else:
-        page.screenshot(path=f"bamboo_timeout_{symbol}.png")
+        page.screenshot(path=f"cardinalstone_timeout_{symbol}.png")
         browser.close()
         return {"status": "FAILED", "reason": "RECEIPT_CONFIRMATION_TIMEOUT"}
 
     except PlaywrightTimeoutError as te:
-      page.screenshot(path=f"bamboo_timeout_{symbol}.png")
+      page.screenshot(path=f"cardinalstone_timeout_{symbol}.png")
       browser.close()
       return {"status": "FAILED", "reason": f"TIMEOUT_ERROR: {str(te)}"}
     except Exception as err:
-      page.screenshot(path=f"bamboo_error_{symbol}.png")
+      page.screenshot(path=f"cardinalstone_error_{symbol}.png")
       browser.close()
       return {"status": "FAILED", "reason": str(err)}
+

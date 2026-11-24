@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 
 
 def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, float], str]:
@@ -44,5 +44,6 @@ def fetch_official_ngx_closes(target_tickers: list[str]) -> tuple[dict[str, floa
 
     if prices:
         return prices, f"LIVE NGX MARKET FEED ({len(prices)}/{len(wanted)} official NSENG closing prices synced)"
-    return {}, "NGX PUBLIC FEED UNREACHABLE (Using saved portfolio prices — verify on Bamboo before ordering)"
+    return {}, "NGX PUBLIC FEED UNREACHABLE (Using saved portfolio prices â€” verify on CardinalStone before ordering)"
  
+
