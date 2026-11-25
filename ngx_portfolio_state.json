@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-24 14:49:58 UTC",
+  "updated_at": "2026-11-25 04:54:51 UTC",
   "free_cash_ngn": 948.67,
   "holdings": [
     {
@@ -23,7 +23,7 @@
       "Company": "Guaranty Trust Holding Co.",
       "Units": 200.0,
       "Avg_Cost": 120.9,
-      "Live_Price": 114.0,
+      "Live_Price": 111.0,
       "Target_Weight_Pct": 16.0
     },
     {
@@ -39,7 +39,7 @@
       "Company": "Zenith Bank Plc",
       "Units": 100.0,
       "Avg_Cost": 116.6,
-      "Live_Price": 110.5,
+      "Live_Price": 105.0,
       "Target_Weight_Pct": 12.0
     },
     {
@@ -55,7 +55,7 @@
       "Company": "Unilever Nigeria Plc",
       "Units": 118.0,
       "Avg_Cost": 109.6,
-      "Live_Price": 112.2,
+      "Live_Price": 101.0,
       "Target_Weight_Pct": 10.0
     },
     {
