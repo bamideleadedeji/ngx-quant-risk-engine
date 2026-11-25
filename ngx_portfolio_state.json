@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-24 14:49:58 UTC",
-  "free_cash_ngn": 948.67,
+  "updated_at": "2026-11-25 10:12:10 UTC",
+  "free_cash_ngn": 1337.34,
   "holdings": [
     {
       "Ticker": "BUAFOODS",
@@ -37,16 +37,16 @@
     {
       "Ticker": "ZENITHBANK",
       "Company": "Zenith Bank Plc",
-      "Units": 100.0,
-      "Avg_Cost": 116.6,
-      "Live_Price": 110.5,
+      "Units": 211.0,
+      "Avg_Cost": 110.8,
+      "Live_Price": 103.5,
       "Target_Weight_Pct": 12.0
     },
     {
       "Ticker": "OKOMUOIL",
       "Company": "Okomu Oil Palm Plc",
-      "Units": 14.0,
-      "Avg_Cost": 1117.57,
+      "Units": 19.0,
+      "Avg_Cost": 1096.18,
       "Live_Price": 1137.1,
       "Target_Weight_Pct": 10.0
     },
@@ -55,14 +55,14 @@
       "Company": "Unilever Nigeria Plc",
       "Units": 118.0,
       "Avg_Cost": 109.6,
-      "Live_Price": 112.2,
+      "Live_Price": 101.0,
       "Target_Weight_Pct": 10.0
     },
     {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 38.0,
-      "Avg_Cost": 275.23,
+      "Units": 48.0,
+      "Avg_Cost": 273.83,
       "Live_Price": 290.5,
       "Target_Weight_Pct": 8.0
     }
