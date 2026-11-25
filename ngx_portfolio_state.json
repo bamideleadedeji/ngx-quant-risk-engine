@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-25 10:12:10 UTC",
-  "free_cash_ngn": 1337.34,
+  "updated_at": "2026-11-25 13:04:55 UTC",
+  "free_cash_ngn": 267.64,
   "holdings": [
     {
       "Ticker": "BUAFOODS",
@@ -23,7 +23,7 @@
       "Company": "Guaranty Trust Holding Co.",
       "Units": 200.0,
       "Avg_Cost": 120.9,
-      "Live_Price": 111.0,
+      "Live_Price": 114.0,
       "Target_Weight_Pct": 16.0
     },
     {
@@ -39,7 +39,7 @@
       "Company": "Zenith Bank Plc",
       "Units": 211.0,
       "Avg_Cost": 110.8,
-      "Live_Price": 103.5,
+      "Live_Price": 104.0,
       "Target_Weight_Pct": 12.0
     },
     {
@@ -61,8 +61,8 @@
     {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 48.0,
-      "Avg_Cost": 273.83,
+      "Units": 52.0,
+      "Avg_Cost": 273.33,
       "Live_Price": 290.5,
       "Target_Weight_Pct": 8.0
     }
