@@ -3,7 +3,7 @@
   "broker": "CardinalStone Securities (0138062119)",
   "rebalance_mode": "CASH_DEPLOYMENT_ONLY",
   "max_concentration_trim_pct": 15.0,
-  "free_cash_ngn": 267.64,
+  "free_cash_ngn": 20000.0,
   "holdings": [
     {
       "Ticker": "ZENITHBANK",
