@@ -69,7 +69,8 @@ def run_nightly_rebalance_alert():
     df, cash, vdf, trim_lim = load_state()
 
     tickers = sorted(set(df["Ticker"].tolist() + (vdf["Ticker"].tolist() if not vdf.empty else [])))
-    closes = fetch_official_ngx_closes(tickers)
+    res = fetch_official_ngx_closes(tickers)
+    closes = res[0] if isinstance(res, tuple) else res
     matched = sum(1 for t in tickers if t in closes)
     feed = f"LIVE NGX MARKET FEED ({matched}/{len(tickers)} official NSENG closes)"
 
