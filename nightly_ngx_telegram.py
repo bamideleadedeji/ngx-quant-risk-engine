@@ -109,7 +109,8 @@ def run_nightly_rebalance_alert():
         for _, r in df.sort_values("Drift", ascending=True).iterrows():
             if r["Drift"] < -0.5 and w_cash >= MIN_FLOOR:
                 lpx = round(r["Close_NGN"] * (1.0 + BUY_BUF / 100.0), 2)
-                u = math.floor((w_cash / (1.0 + FEE_RATE)) / max(lpx, 0.01))
+                shortfall = max(0.0, ((r['Target_Weight_Pct'] / 100.0) * cs_tot) - proj[r['Ticker']])
+                u = math.floor(min(w_cash / (1.0 + FEE_RATE), shortfall) / max(lpx, 0.01))
                 val = round(u * lpx, 2)
                 fee = round(val * FEE_RATE, 2)
                 if u >= 1 and val >= MIN_FLOOR and (val + fee) <= w_cash:
