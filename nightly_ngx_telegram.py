@@ -141,7 +141,7 @@ def run_nightly_rebalance_alert():
     tickets = sells + buys
     if tickets:
         subject = f"CardinalStone Order Ticket ({len(tickets)} Orders) - {wat_now.strftime('%d %b %Y')}"
-        lines.append("Executable Limit Orders on CardinalStone (0138062119):")
+        lines.append("Place on CardinalStone (0138062119) at 9:00 AM WAT (Window: 9:00 AM - 4:00 PM WAT):")
         for t in sells:
             lines.append(f"[TRIM SELL] {t['Units']} {t['Ticker']} | Close: NGN {t['Ref_Close']:,.2f} -> Limit: NGN {t['Limit_NGN']:,.2f} (~NGN {t['Value_NGN']:,.2f}) | {t['Drift']}")
         for t in buys:
