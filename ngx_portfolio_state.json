@@ -1,70 +1,91 @@
 {
-  "updated_at": "2026-11-25 13:04:55 UTC",
+  "updated_at": "2026-11-26 16:05:19 UTC",
+  "broker": "CardinalStone Securities (0138062119)",
+  "rebalance_mode": "CASH_DEPLOYMENT_ONLY",
+  "max_concentration_trim_pct": 15.0,
   "free_cash_ngn": 267.64,
   "holdings": [
     {
-      "Ticker": "BUAFOODS",
-      "Company": "BUA Foods Plc",
-      "Units": 50.0,
-      "Avg_Cost": 700.0,
-      "Live_Price": 760.6,
-      "Target_Weight_Pct": 16.0
-    },
-    {
-      "Ticker": "SEPLAT",
-      "Company": "Seplat Energy Plc",
-      "Units": 2.0,
-      "Avg_Cost": 16000.1,
-      "Live_Price": 16241.9,
-      "Target_Weight_Pct": 16.0
-    },
-    {
-      "Ticker": "GTCO",
-      "Company": "Guaranty Trust Holding Co.",
-      "Units": 200.0,
-      "Avg_Cost": 120.9,
-      "Live_Price": 114.0,
-      "Target_Weight_Pct": 16.0
-    },
-    {
-      "Ticker": "MTNN",
-      "Company": "MTN Nigeria Comm. Plc",
-      "Units": 23.0,
-      "Avg_Cost": 821.69,
-      "Live_Price": 837.0,
-      "Target_Weight_Pct": 12.0
-    },
-    {
       "Ticker": "ZENITHBANK",
       "Company": "Zenith Bank Plc",
-      "Units": 211.0,
-      "Avg_Cost": 110.8,
-      "Live_Price": 104.0,
-      "Target_Weight_Pct": 12.0
+      "Units": 111.0,
+      "Avg_Cost": 105.57,
+      "Live_Price": 102.0,
+      "Target_Weight_Pct": 25.0
     },
     {
       "Ticker": "OKOMUOIL",
       "Company": "Okomu Oil Palm Plc",
-      "Units": 19.0,
-      "Avg_Cost": 1096.18,
+      "Units": 9.0,
+      "Avg_Cost": 1039.72,
       "Live_Price": 1137.1,
-      "Target_Weight_Pct": 10.0
-    },
-    {
-      "Ticker": "UNILEVER",
-      "Company": "Unilever Nigeria Plc",
-      "Units": 118.0,
-      "Avg_Cost": 109.6,
-      "Live_Price": 101.0,
-      "Target_Weight_Pct": 10.0
+      "Target_Weight_Pct": 25.0
     },
     {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 52.0,
-      "Avg_Cost": 273.33,
+      "Units": 32.0,
+      "Avg_Cost": 272.29,
       "Live_Price": 290.5,
-      "Target_Weight_Pct": 8.0
+      "Target_Weight_Pct": 22.0
+    },
+    {
+      "Ticker": "MTNN",
+      "Company": "MTN Nigeria Comm. Plc",
+      "Units": 8.0,
+      "Avg_Cost": 815.49,
+      "Live_Price": 796.5,
+      "Target_Weight_Pct": 18.0
+    },
+    {
+      "Ticker": "UNILEVER",
+      "Company": "Unilever Nigeria Plc",
+      "Units": 33.0,
+      "Avg_Cost": 103.61,
+      "Live_Price": 101.0,
+      "Target_Weight_Pct": 10.0
+    }
+  ],
+  "apex_legacy_vault_readonly": [
+    {
+      "Ticker": "BUAFOODS",
+      "Units": 50.0,
+      "Avg_Cost": 700.0
+    },
+    {
+      "Ticker": "SEPLAT",
+      "Units": 2.0,
+      "Avg_Cost": 16000.1
+    },
+    {
+      "Ticker": "GTCO",
+      "Units": 200.0,
+      "Avg_Cost": 120.9
+    },
+    {
+      "Ticker": "ZENITHBANK",
+      "Units": 100.0,
+      "Avg_Cost": 116.55
+    },
+    {
+      "Ticker": "UNILEVER",
+      "Units": 85.0,
+      "Avg_Cost": 111.93
+    },
+    {
+      "Ticker": "MTNN",
+      "Units": 15.0,
+      "Avg_Cost": 825.0
+    },
+    {
+      "Ticker": "TRANSCOHOT",
+      "Units": 20.0,
+      "Avg_Cost": 275.0
+    },
+    {
+      "Ticker": "OKOMUOIL",
+      "Units": 10.0,
+      "Avg_Cost": 1147.0
     }
   ]
 }
