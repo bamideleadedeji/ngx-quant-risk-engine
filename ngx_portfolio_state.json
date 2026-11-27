@@ -1,9 +1,9 @@
 {
-  "updated_at": "2026-11-27 09:26:36 UTC",
+  "updated_at": "2026-11-27 10:03:40 UTC",
   "broker": "CardinalStone Securities (0138062119)",
   "rebalance_mode": "CASH_DEPLOYMENT_ONLY",
   "max_concentration_trim_pct": 15.0,
-  "free_cash_ngn": 1025.37,
+  "free_cash_ngn": 927.07,
   "holdings": [
     {
       "Ticker": "OKOMUOIL",
@@ -40,8 +40,8 @@
     {
       "Ticker": "CADBURY",
       "Company": "Cadbury Nigeria Plc",
-      "Units": 120.0,
-      "Avg_Cost": 60.47,
+      "Units": 170.0,
+      "Avg_Cost": 60.91,
       "Live_Price": 62.7,
       "Target_Weight_Pct": 10.0
     },
