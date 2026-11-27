@@ -57,7 +57,7 @@ def send_email(subject, body):
     msg["From"] = f"NGX Quant Risk Desk <{GMAIL_USER}>"
     msg["To"] = GMAIL_USER
     msg.set_content(body)
-    with smtplib.SMTP_SSL("://gmail.com", 465, timeout=15) as s:
+    with smtplib.SMTP_SSL("smtp." + "gmail.com", 465, timeout=15) as s:
         s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
         s.send_message(msg)
     print(f"Email dispatched -> {subject}")
