@@ -1,41 +1,49 @@
 {
-  "updated_at": "2026-11-26 16:05:19 UTC",
+  "updated_at": "2026-11-27 09:26:36 UTC",
   "broker": "CardinalStone Securities (0138062119)",
   "rebalance_mode": "CASH_DEPLOYMENT_ONLY",
   "max_concentration_trim_pct": 15.0,
-  "free_cash_ngn": 25267.64,
+  "free_cash_ngn": 1025.37,
   "holdings": [
-    {
-      "Ticker": "ZENITHBANK",
-      "Company": "Zenith Bank Plc",
-      "Units": 111.0,
-      "Avg_Cost": 105.57,
-      "Live_Price": 102.0,
-      "Target_Weight_Pct": 25.0
-    },
     {
       "Ticker": "OKOMUOIL",
       "Company": "Okomu Oil Palm Plc",
-      "Units": 9.0,
-      "Avg_Cost": 1039.72,
+      "Units": 22.0,
+      "Avg_Cost": 1039.76,
       "Live_Price": 1137.1,
       "Target_Weight_Pct": 25.0
     },
     {
+      "Ticker": "ZENITHBANK",
+      "Company": "Zenith Bank Plc",
+      "Units": 160.0,
+      "Avg_Cost": 105.19,
+      "Live_Price": 109.7,
+      "Target_Weight_Pct": 22.0
+    },
+    {
       "Ticker": "TRANSCOHOT",
       "Company": "Transcorp Hotels Plc",
-      "Units": 32.0,
-      "Avg_Cost": 272.29,
+      "Units": 49.0,
+      "Avg_Cost": 270.0,
       "Live_Price": 290.5,
-      "Target_Weight_Pct": 22.0
+      "Target_Weight_Pct": 18.0
     },
     {
       "Ticker": "MTNN",
       "Company": "MTN Nigeria Comm. Plc",
-      "Units": 8.0,
-      "Avg_Cost": 815.49,
+      "Units": 14.0,
+      "Avg_Cost": 811.69,
       "Live_Price": 796.5,
-      "Target_Weight_Pct": 18.0
+      "Target_Weight_Pct": 15.0
+    },
+    {
+      "Ticker": "CADBURY",
+      "Company": "Cadbury Nigeria Plc",
+      "Units": 120.0,
+      "Avg_Cost": 60.47,
+      "Live_Price": 62.7,
+      "Target_Weight_Pct": 10.0
     },
     {
       "Ticker": "UNILEVER",
