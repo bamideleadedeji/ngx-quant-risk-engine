@@ -158,3 +158,4 @@ def run_nightly_rebalance_alert():
 
 if __name__ == "__main__":
     run_nightly_rebalance_alert()
+
